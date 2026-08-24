@@ -159,7 +159,7 @@ This repository is actively developed. Run the test suite before upgrading a pro
 python -m pytest
 ```
 
-The package metadata currently identifies the project as an early release. Treat compiler output as a build artifact, pin versions, and use browser end-to-end tests for the flows your application depends on.
+The package is currently being prepared as beta release `0.2.0b1`. Treat compiler output as a build artifact, pin versions, and use browser end-to-end tests for the flows your application depends on. The beta label is intentional: the compiler and framework examples are usable, but the debugger dashboard is not implemented yet and production teams should validate their own browser and deployment matrix.
 
 ## License
 

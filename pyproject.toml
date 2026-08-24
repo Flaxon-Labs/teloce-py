@@ -1,17 +1,18 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "teloce-py"
-description = "A Python compiler for Teloce .vel Single File Components"
+description = "Python-native compiler and runtime for Teloce .vel Single File Components"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    { name = "Teloce Contributors" }
+    { name = "Aldane Hutchinson" }
 ]
 maintainers = [
-    { name = "Aldane Hutchinson, email = "Aldane Hutchinson" }
+    { name = "Aldane Hutchinson" }
 ]
 keywords = [
     "teloce",
@@ -25,14 +26,14 @@ keywords = [
     "flaxon"
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Compilers",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
 ]
@@ -41,19 +42,21 @@ dependencies = []
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://teloce.dev"
-Documentation = "https://docs.teloce.dev"
-Repository = "https://github.com/aldanedev-create/telonce"
-Issues = "https://github.com/aldanedev-create/telonce/issues"
-Changelog = "https://github.com/aldanedev-create/telonce/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/aldanedev-create/teloce-py"
+Documentation = "https://github.com/aldanedev-create/teloce-py/tree/main/docs"
+Repository = "https://github.com/aldanedev-create/teloce-py"
+Issues = "https://github.com/aldanedev-create/teloce-py/issues"
+Changelog = "https://github.com/aldanedev-create/teloce-py/blob/main/CHANGELOG.md"
 
 [project.scripts]
 teloce = "teloce.cli.main:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-packages = { find = { where = ["src"] } }
 include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
 "teloce.runtime" = ["*.js"]
@@ -63,14 +66,14 @@ version = { attr = "teloce.version.__version__" }
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [tool.isort]
 profile = "black"
 line_length = 88
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
