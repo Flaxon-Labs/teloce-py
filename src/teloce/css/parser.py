@@ -1,0 +1,395 @@
+"""
+CSS Parser - parses CSS stylesheets.
+
+Converts CSS source into an AST representation.
+"""
+
+import re
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any, Tuple
+
+
+@dataclass
+class CSSDeclaration:
+    """A CSS declaration (property: value)."""
+    property: str
+    value: str
+    line: int = 0
+    column: int = 0
+
+
+@dataclass
+class CSSRule:
+    """A CSS rule with selector and declarations."""
+    selector: str
+    declarations: List[CSSDeclaration] = field(default_factory=list)
+    line: int = 0
+    column: int = 0
+    
+    def get_declaration(self, prop: str) -> Optional[str]:
+        """Get a declaration value by property name."""
+        for decl in self.declarations:
+            if decl.property == prop:
+                return decl.value
+        return None
+    
+    def has_declaration(self, prop: str) -> bool:
+        """Check if a declaration exists."""
+        return self.get_declaration(prop) is not None
+
+
+@dataclass
+class CSSAtRule:
+    """A CSS at-rule (@media, @keyframes, etc.)."""
+    name: str
+    value: str = ""
+    rules: List[CSSRule] = field(default_factory=list)
+    declarations: List[CSSDeclaration] = field(default_factory=list)
+    line: int = 0
+    column: int = 0
+
+
+@dataclass
+class CSSStylesheet:
+    """A complete CSS stylesheet."""
+    rules: List[CSSRule] = field(default_factory=list)
+    at_rules: List[CSSAtRule] = field(default_factory=list)
+    comments: List[str] = field(default_factory=list)
+
+
+class CSSParser:
+    """
+    Parses CSS stylesheets into an AST.
+    """
+    
+    def __init__(self):
+        self.source: str = ""
+        self.position: int = 0
+        self.line: int = 1
+        self.column: int = 1
+        self.errors: List[str] = []
+    
+    def parse(self, source: str) -> CSSStylesheet:
+        """
+        Parse a CSS stylesheet.
+        
+        Args:
+            source: The CSS source code
+            
+        Returns:
+            A CSSStylesheet object.
+        """
+        self.source = source
+        self.position = 0
+        self.line = 1
+        self.column = 1
+        self.errors = []
+        
+        stylesheet = CSSStylesheet()
+        
+        while self.position < len(self.source):
+            self._skip_whitespace_and_comments()
+            
+            if self.position >= len(self.source):
+                break
+            
+            if self._peek() == '@':
+                at_rule = self._parse_at_rule()
+                if at_rule:
+                    if at_rule.name == 'media' or at_rule.name == 'supports':
+                        stylesheet.at_rules.append(at_rule)
+                    else:
+                        # Simple at-rule like @import, @charset
+                        stylesheet.at_rules.append(at_rule)
+            else:
+                rule = self._parse_rule()
+                if rule:
+                    stylesheet.rules.append(rule)
+        
+        return stylesheet
+    
+    def _parse_rule(self) -> Optional[CSSRule]:
+        """Parse a CSS rule."""
+        start_line = self.line
+        start_col = self.column
+        
+        selector = self._read_selector()
+        if not selector:
+            return None
+        
+        self._skip_whitespace_and_comments()
+        
+        if self._peek() != '{':
+            self.errors.append(f"Expected '{{' at line {self.line}")
+            return None
+        
+        self._advance()  # Skip '{'
+        
+        declarations = []
+        while self.position < len(self.source):
+            self._skip_whitespace_and_comments()
+            
+            if self._peek() == '}':
+                self._advance()
+                break
+            
+            decl = self._parse_declaration()
+            if decl:
+                declarations.append(decl)
+            
+            self._skip_whitespace_and_comments()
+            
+            if self._peek() == ';':
+                self._advance()
+        
+        return CSSRule(
+            selector=selector.strip(),
+            declarations=declarations,
+            line=start_line,
+            column=start_col
+        )
+    
+    def _parse_declaration(self) -> Optional[CSSDeclaration]:
+        """Parse a CSS declaration."""
+        start_line = self.line
+        start_col = self.column
+        
+        prop = self._read_property()
+        if not prop:
+            return None
+        
+        self._skip_whitespace_and_comments()
+        
+        if self._peek() != ':':
+            self.errors.append(f"Expected ':' at line {self.line}")
+            return None
+        
+        self._advance()  # Skip ':'
+        
+        self._skip_whitespace_and_comments()
+        
+        value = self._read_value()
+        if value is None:
+            return None
+        
+        return CSSDeclaration(
+            property=prop.strip(),
+            value=value.strip(),
+            line=start_line,
+            column=start_col
+        )
+    
+    def _parse_at_rule(self) -> Optional[CSSAtRule]:
+        """Parse a CSS at-rule."""
+        start_line = self.line
+        start_col = self.column
+        
+        self._advance()  # Skip '@'
+        
+        name = self._read_identifier()
+        if not name:
+            return None
+        
+        self._skip_whitespace_and_comments()
+        
+        # Read the value until '{' or ';'
+        value = ""
+        while self.position < len(self.source):
+            char = self._peek()
+            if char == '{' or char == ';':
+                break
+            value += char
+            self._advance()
+        
+        value = value.strip()
+        
+        # Check if it's a block at-rule (@media, @supports, etc.)
+        if self._peek() == '{':
+            self._advance()  # Skip '{'
+            
+            rules = []
+            declarations = []
+            
+            while self.position < len(self.source):
+                self._skip_whitespace_and_comments()
+                
+                if self._peek() == '}':
+                    self._advance()
+                    break
+                
+                # Check for nested at-rule
+                if self._peek() == '@':
+                    nested = self._parse_at_rule()
+                    if nested:
+                        # Flatten nested at-rules into rules
+                        for rule in nested.rules:
+                            rules.append(rule)
+                        continue
+                
+                # Parse regular rule
+                rule = self._parse_rule()
+                if rule:
+                    rules.append(rule)
+            
+            return CSSAtRule(
+                name=name,
+                value=value,
+                rules=rules,
+                declarations=declarations,
+                line=start_line,
+                column=start_col
+            )
+        elif self._peek() == ';':
+            self._advance()  # Skip ';'
+            return CSSAtRule(
+                name=name,
+                value=value,
+                line=start_line,
+                column=start_col
+            )
+        
+        return None
+    
+    def _read_selector(self) -> str:
+        """Read a CSS selector."""
+        start = self.position
+        
+        while self.position < len(self.source):
+            char = self._peek()
+            if char == '{':
+                break
+            self._advance()
+        
+        return self.source[start:self.position].strip()
+    
+    def _read_property(self) -> str:
+        """Read a CSS property name."""
+        start = self.position
+        
+        while self.position < len(self.source):
+            char = self._peek()
+            if char == ':' or char == ';' or char == '}':
+                break
+            self._advance()
+        
+        return self.source[start:self.position].strip()
+    
+    def _read_value(self) -> Optional[str]:
+        """Read a CSS value."""
+        start = self.position
+        in_string = False
+        string_char = None
+        escape = False
+        parens = 0
+        
+        while self.position < len(self.source):
+            char = self._peek()
+            
+            if escape:
+                escape = False
+                self._advance()
+                continue
+            
+            if char == '\\':
+                escape = True
+                self._advance()
+                continue
+            
+            if in_string:
+                if char == string_char:
+                    in_string = False
+                    string_char = None
+                self._advance()
+                continue
+            
+            if char in ('"', "'"):
+                in_string = True
+                string_char = char
+                self._advance()
+                continue
+            
+            if char == '(':
+                parens += 1
+                self._advance()
+                continue
+            
+            if char == ')':
+                parens -= 1
+                self._advance()
+                continue
+            
+            if char == ';' and parens == 0:
+                break
+            
+            if char == '}' and parens == 0:
+                break
+            
+            self._advance()
+        
+        value = self.source[start:self.position].strip()
+        return value if value else None
+    
+    def _read_identifier(self) -> str:
+        """Read an identifier."""
+        start = self.position
+        
+        while self.position < len(self.source):
+            char = self._peek()
+            if not (char.isalnum() or char in '-_'):
+                break
+            self._advance()
+        
+        return self.source[start:self.position]
+    
+    def _skip_whitespace_and_comments(self):
+        """Skip whitespace and comments."""
+        while self.position < len(self.source):
+            char = self._peek()
+            
+            if char.isspace():
+                self._advance()
+                continue
+            
+            if char == '/' and self._peek_offset(1) == '*':
+                self._skip_block_comment()
+                continue
+            
+            break
+    
+    def _skip_block_comment(self):
+        """Skip a block comment /* ... */."""
+        self._advance()  # Skip '/'
+        self._advance()  # Skip '*'
+        
+        while self.position < len(self.source):
+            if self._peek() == '*' and self._peek_offset(1) == '/':
+                self._advance()
+                self._advance()
+                break
+            self._advance()
+    
+    def _peek(self, offset: int = 0) -> str:
+        """Peek at a character."""
+        pos = self.position + offset
+        if pos >= len(self.source):
+            return ''
+        return self.source[pos]
+    
+    def _peek_offset(self, offset: int = 1) -> str:
+        """Peek ahead by offset."""
+        return self._peek(offset)
+    
+    def _advance(self):
+        """Advance to the next character."""
+        if self.position < len(self.source):
+            char = self.source[self.position]
+            if char == '\n':
+                self.line += 1
+                self.column = 1
+            else:
+                self.column += 1
+            self.position += 1
+    
+    @property
+    def has_errors(self) -> bool:
+        return len(self.errors) > 0

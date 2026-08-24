@@ -1,0 +1,16 @@
+<template>
+  <main class="cms"><h1>FastAPI CMS</h1><p v-if="error" class="error">{{ error }}</p>
+    <aside><button v-for="page in pages" :key="page.slug" @click="select(page)">{{ page.title }}</button></aside>
+    <section v-if="selected"><input v-model="selected.title" /><textarea v-model="selected.body"></textarea><button @click="save">Save page</button><span v-if="saved">Saved</span></section>
+  </main>
+</template>
+<script>
+export default { data() { return { pages: [], selected: null, saved: false, error: "" }; }, mounted() { this.load(); }, methods: {
+  async load() { try { this.pages = await fetch("/api/pages").then((r) => r.json()); this.selected = this.pages[0]; } catch (e) { this.error = "CMS API unavailable"; } },
+  select(page) { this.selected = page; this.saved = false; },
+  async save() { const response = await fetch(`/api/pages/${this.selected.slug}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(this.selected) }); this.selected = await response.json(); this.saved = true; }
+} };
+</script>
+<style scoped>
+.cms { max-width: 56rem; margin: 2rem auto; font: 1rem system-ui; } aside { display: flex; gap: .5rem; margin-bottom: 1rem; } section { display: grid; gap: .75rem; } textarea { min-height: 12rem; } .error { color: #b42318; }
+</style>

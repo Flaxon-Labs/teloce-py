@@ -1,0 +1,170 @@
+# Teloce CLI
+
+Install and inspect the command:
+
+```bash
+python -m pip install teloce-py
+teloce --help
+teloce --version
+```
+
+Run commands from the project directory containing `static/`, `templates/`, and optional configuration. The CLI discovers the current working directory.
+
+## Fastest workflow: `python app.py`
+
+For the “write a `.vel` file and see it in the browser” workflow, call the builder from your Python entry point:
+
+```python
+from pathlib import Path
+from flask import Flask, render_template
+from teloce.build import build_project
+
+ROOT = Path(__file__).parent
+app = Flask(__name__, static_folder=str(ROOT / "dist" / "static"))
+
+@app.get("/")
+def home():
+    return render_template("index.html")
+
+if __name__ == "__main__":
+    build_project(ROOT, options={"dev": True, "source_maps": True})
+    app.run(debug=True, port=5000)
+```
+
+Run `python app.py`, then open `http://127.0.0.1:5000`. See [Getting started](getting-started.md) for the complete `App.vel` and HTML files.
+
+## `teloce dev`
+
+Starts the development server, performs an initial build, watches `.vel` and template files, and reloads the browser when HMR is enabled.
+
+```bash
+teloce dev
+teloce dev --port 5173 --host localhost
+teloce dev --no-hmr
+teloce dev --proxy http://127.0.0.1:5000
+```
+
+Options: `--port`/`-p` (default `5173`), `--host`/`-H` (default `localhost`), `--no-hmr`, and `--proxy URL`.
+
+## `teloce watch`
+
+Runs a separate watcher and development server:
+
+```bash
+teloce watch
+teloce watch --out-dir build --port 5173 --host 127.0.0.1
+teloce watch --no-hmr
+```
+
+Options: `--out-dir`, `--no-hmr`, `--port`, `--host`, and `--proxy`.
+
+## `teloce build`
+
+Builds production assets:
+
+```bash
+teloce build
+teloce build --out-dir dist --source-map
+teloce build --minify --hash-assets --bundle
+teloce build --no-clean
+```
+
+Options:
+
+- `--out-dir`, `-o`: output directory, default `dist`.
+- `--minify` and `--no-minify`: enable or disable minification.
+- `--source-map`: emit source maps.
+- `--no-clean`: preserve the existing output directory.
+- `--hash-assets`: add content hashes to JavaScript and CSS filenames.
+- `--bundle`: create a dependency-aware production bundle.
+- `--entry FILE`: choose the bundle entry relative to the output directory.
+
+Recommended CI command: `teloce build --out-dir dist --source-map --hash-assets --bundle`.
+
+## `teloce lint`
+
+```bash
+teloce lint
+teloce lint --strict
+teloce lint --fix
+```
+
+`--strict` enables strict checks. `--fix` enables available automatic fixes; review the result and run lint again.
+
+## `teloce doctor`
+
+```bash
+teloce doctor
+teloce doctor --verbose
+```
+
+Doctor checks Python and Teloce versions, project discovery, configuration, required directories, and discovered `.vel` files.
+
+## `teloce create`
+
+```bash
+teloce create my-app --template flask
+teloce create my-api --template fastapi
+teloce create my-site --template django
+teloce create basic-app --template basic
+```
+
+Options are `--template`, `--no-install`, and `--no-git`. Templates are `flask`, `fastapi`, `django`, and the basic fallback template.
+
+## `teloce debug`
+
+```bash
+teloce debug
+teloce debug --port 9000 --host localhost
+teloce debug --no-open
+```
+
+The current command is a debugger launcher placeholder. It discovers the
+project, prints `http://localhost:9000`, opens that URL unless `--no-open` is
+used, prints the planned debugger capabilities, and stays alive until
+`Ctrl+C`. It does **not** currently start an HTTP dashboard or provide a
+working component inspector, state viewer, or performance panel. Unless
+another service is already listening on that port, the browser will show a
+connection error.
+
+The default port is `9000`. A production debugger dashboard still needs a
+dashboard server, browser protocol, component registration, state snapshots,
+secure access control, and tests before this command can be described as a
+working debugger.
+
+## `teloce benchmark`
+
+```bash
+teloce benchmark .
+teloce benchmark . --iterations 5
+teloce benchmark . --iterations 5 --json
+```
+
+Use `--json` for CI and performance tracking.
+
+## Single-file compilation
+
+The current CLI does not have a `teloce compile` subcommand. Use `teloce build` for project compilation or call the public Python API for one file:
+
+```python
+from pathlib import Path
+from teloce.compiler import compile_file
+
+result = compile_file("static/js/App.vel")
+if not result["success"]:
+    raise RuntimeError(result["diagnostics"])
+Path("static/js/App.js").write_text(result["code"], encoding="utf-8")
+```
+
+## Command guide
+
+| Need | Command |
+|---|---|
+| Create a project | `teloce create my-app --template flask` |
+| Run Python app and compile first | `python app.py` |
+| Develop with Teloce server | `teloce dev` |
+| Watch and rebuild | `teloce watch` |
+| Production output | `teloce build --hash-assets --bundle` |
+| Check setup | `teloce doctor --verbose` |
+| Validate templates | `teloce lint --strict` |
+| Benchmark compilation | `teloce benchmark . --json` |

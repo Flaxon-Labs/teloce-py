@@ -1,0 +1,223 @@
+"""
+Main CLI entry point.
+
+Provides the command-line interface for Teloce.
+"""
+
+import sys
+import argparse
+from typing import Optional
+
+from teloce.cli.dev import dev_command
+from teloce.cli.build import build_command
+from teloce.cli.watch import watch_command
+from teloce.cli.debug import debug_command
+from teloce.cli.doctor import doctor_command
+from teloce.cli.lint import lint_command
+from teloce.cli.create import create_command
+from teloce.cli.benchmark import benchmark_command
+from teloce.version import __version__
+
+
+def main(args: Optional[list] = None) -> int:
+    """
+    Main CLI entry point.
+    
+    Args:
+        args: Command-line arguments.
+        
+    Returns:
+        Exit code.
+    """
+    parser = argparse.ArgumentParser(
+        prog='teloce',
+        description='Teloce - A Python compiler for .vel Single File Components',
+        epilog='For more information, visit https://teloce.dev'
+    )
+    
+    parser.add_argument(
+        '-v', '--version',
+        action='version',
+        version=f'Teloce-Py {__version__}'
+    )
+    
+    subparsers = parser.add_subparsers(
+        dest='command',
+        help='Command to run',
+        required=True
+    )
+    
+    # Dev command
+    dev_parser = subparsers.add_parser('dev', help='Start development server')
+    dev_parser.add_argument(
+        '-p', '--port',
+        type=int,
+        default=5173,
+        help='Port to run on (default: 5173)'
+    )
+    dev_parser.add_argument(
+        '-H', '--host',
+        default='localhost',
+        help='Host to bind to (default: localhost)'
+    )
+    dev_parser.add_argument(
+        '--no-hmr',
+        action='store_true',
+        help='Disable hot module replacement'
+    )
+    dev_parser.add_argument(
+        '--proxy',
+        help='Proxy target URL'
+    )
+    
+    # Build command
+    build_parser = subparsers.add_parser('build', help='Build for production')
+    build_parser.add_argument(
+        '-o', '--out-dir',
+        default='dist',
+        help='Output directory (default: dist)'
+    )
+    build_parser.add_argument(
+        '--minify',
+        action='store_true',
+        help='Minify output'
+    )
+    build_parser.add_argument(
+        '--no-minify',
+        action='store_true',
+        help='Disable minification'
+    )
+    build_parser.add_argument(
+        '--source-map',
+        action='store_true',
+        help='Generate source maps'
+    )
+    build_parser.add_argument(
+        '--no-clean',
+        action='store_true',
+        help='Keep the existing output directory before building'
+    )
+    build_parser.add_argument(
+        '--hash-assets',
+        action='store_true',
+        help='Add content hashes to generated JavaScript and CSS filenames'
+    )
+    build_parser.add_argument(
+        '--bundle',
+        action='store_true',
+        help='Create a dependency-aware production ES module bundle'
+    )
+    build_parser.add_argument(
+        '--entry',
+        help='Bundle entry module relative to the output directory'
+    )
+    
+    # Watch command
+    watch_parser = subparsers.add_parser('watch', help='Watch for changes and rebuild')
+    watch_parser.add_argument(
+        '-o', '--out-dir',
+        default='dist',
+        help='Output directory (default: dist)'
+    )
+    watch_parser.add_argument(
+        '--no-hmr',
+        action='store_true',
+        help='Disable hot module replacement'
+    )
+    watch_parser.add_argument('-p', '--port', type=int, default=5173, help='Server port')
+    watch_parser.add_argument('-H', '--host', default='127.0.0.1', help='Server host')
+    watch_parser.add_argument('--proxy', help='Backend proxy target URL')
+    
+    # Debug command
+    debug_parser = subparsers.add_parser('debug', help='Open debugger dashboard')
+    debug_parser.add_argument(
+        '-p', '--port',
+        type=int,
+        default=9000,
+        help='Debugger port (default: 9000)'
+    )
+    debug_parser.add_argument(
+        '-H', '--host',
+        default='localhost',
+        help='Debugger host (default: localhost)'
+    )
+    debug_parser.add_argument(
+        '--no-open',
+        action='store_true',
+        help="Don't open browser automatically"
+    )
+    
+    # Doctor command
+    doctor_parser = subparsers.add_parser('doctor', help='Check environment and configuration')
+    doctor_parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Show verbose output'
+    )
+    
+    # Lint command
+    lint_parser = subparsers.add_parser('lint', help='Lint Teloce templates')
+    lint_parser.add_argument(
+        '-f', '--fix',
+        action='store_true',
+        help='Fix linting issues'
+    )
+    lint_parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='Strict linting mode'
+    )
+    
+    # Create command
+    create_parser = subparsers.add_parser('create', help='Create a new Teloce project')
+    create_parser.add_argument(
+        'name',
+        nargs='?',
+        default='my-teloce-app',
+        help='Project name'
+    )
+
+    benchmark_parser = subparsers.add_parser('benchmark', help='Benchmark .vel compilation')
+    benchmark_parser.add_argument('root', nargs='?', default='.', help='Project root')
+    benchmark_parser.add_argument('-n', '--iterations', type=int, default=1)
+    benchmark_parser.add_argument('--json', action='store_true', help='Emit machine-readable JSON')
+    create_parser.add_argument(
+        '-t', '--template',
+        default='flask',
+        help='Template to use (default: flask)'
+    )
+    create_parser.add_argument(
+        '--no-install',
+        action='store_true',
+        help="Skip dependency installation"
+    )
+    create_parser.add_argument(
+        '--no-git',
+        action='store_true',
+        help="Skip git initialization"
+    )
+    
+    parsed_args = parser.parse_args(args)
+    
+    # Execute command
+    command_map = {
+        'dev': dev_command,
+        'build': build_command,
+        'watch': watch_command,
+        'debug': debug_command,
+        'doctor': doctor_command,
+        'lint': lint_command,
+        'create': create_command,
+        'benchmark': benchmark_command,
+    }
+    
+    command_func = command_map.get(parsed_args.command)
+    if command_func:
+        return command_func(parsed_args)
+    
+    parser.print_help()
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

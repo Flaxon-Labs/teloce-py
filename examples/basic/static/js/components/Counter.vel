@@ -1,0 +1,17 @@
+<template>
+  <section class="counter">
+    <strong>Count: {{ count }}</strong>
+    <button @click="increment">+</button>
+    <button @click="decrement">-</button>
+  </section>
+</template>
+<script>
+export default {
+  data() { return { count: 0 }; },
+  methods: {
+    increment() { this.count++; },
+    decrement() { this.count--; }
+  }
+}
+</script>
+<style scoped>.counter { display: flex; gap: .5rem; }</style>

@@ -1,0 +1,38 @@
+<template>
+  <main class="chat">
+    <h1>{{ title }}</h1>
+    <p v-if="error" class="error">{{ error }}</p>
+    <ol class="messages">
+      <li v-for="message in messages" :key="message.id"><strong>{{ message.author }}</strong>: {{ message.body }}</li>
+    </ol>
+    <form @submit.prevent="send">
+      <input v-model="draft" aria-label="Message" placeholder="Write a message" />
+      <button :disabled="sending || !draft.trim()">{{ sending ? "Sending..." : "Send" }}</button>
+    </form>
+  </main>
+</template>
+<script>
+export default {
+  data() { return { title: "Flask chat", messages: [], draft: "", sending: false, error: "" }; },
+  mounted() { this.load(); },
+  methods: {
+    async load() {
+      try { this.messages = await fetch("/api/messages").then((response) => response.json()); }
+      catch (error) { this.error = "Could not load messages."; }
+    },
+    async send() {
+      if (!this.draft.trim()) return;
+      this.sending = true;
+      try {
+        const message = await fetch("/api/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: this.draft }) }).then((response) => response.json());
+        if (message.error) throw new Error(message.error);
+        this.messages.push(message); this.draft = "";
+      } catch (error) { this.error = error.message; }
+      finally { this.sending = false; }
+    }
+  }
+};
+</script>
+<style scoped>
+.chat { max-width: 42rem; margin: 3rem auto; font: 1rem system-ui; } .messages { min-height: 12rem; padding: 1rem 2rem; background: #f4f6f8; } form { display: flex; gap: .5rem; } input { flex: 1; padding: .7rem; } .error { color: #b42318; }
+</style>

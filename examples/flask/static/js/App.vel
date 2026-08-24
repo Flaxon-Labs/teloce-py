@@ -1,0 +1,15 @@
+<template>
+  <main class="dashboard">
+    <h1>{{ heading }}</h1>
+    <p>Signed in as {{ user.name }}</p>
+    <button @click="toggle">{{ user.active ? "Sign out" : "Sign in" }}</button>
+    <if condition="user.active"><p class="status">Your workspace is ready.</p></if>
+  </main>
+</template>
+<script>
+export default {
+  data() { return { heading: "Flask dashboard", user: { name: "Developer", active: true } }; },
+  methods: { toggle() { this.user.active = !this.user.active; } }
+}
+</script>
+<style scoped>.dashboard { padding: 2rem; } .status { color: green; }</style>

@@ -1,0 +1,15 @@
+<template>
+  <main>
+    <h1>{{ heading }}</h1>
+    <p v-if="ready">Loaded</p>
+    <p v-else>Loading</p>
+    <button @click="count++">{{ count }}</button>
+    <div v-for="(value, index) in values" :key="index">{{ index }}: {{ value }}</div>
+  </main>
+</template>
+
+<script>
+export default {
+  data() { return { heading: "Example", ready: true, count: 0, values: [1, 2, 3] }; }
+}
+</script>

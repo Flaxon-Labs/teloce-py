@@ -1,0 +1,5 @@
+<template><main class="network"><h1>Network operations</h1><button @click="load">Refresh</button><p v-if="error" class="error">{{ error }}</p><ul><li v-for="device in devices" :key="device.name"><strong>{{ device.name }}</strong> — {{ device.address }} — {{ device.status }} <button @click="check(device)">Check</button></li></ul></main></template>
+<script>
+export default { data() { return { devices: [], error: "" }; }, mounted() { this.load(); }, methods: { async load() { try { this.devices = (await fetch("/api/devices").then((r) => r.json())).devices; } catch (error) { this.error = "Network API unavailable"; } }, async check(device) { const result = await fetch(`/api/devices/${device.name}/check`, { method: "POST" }).then((r) => r.json()); device.status = result.status; } } };
+</script>
+<style scoped>.network { max-width: 52rem; margin: 3rem auto; font: 1rem system-ui; } li { margin: .8rem 0; } .error { color: #b42318; }</style>

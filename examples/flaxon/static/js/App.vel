@@ -1,0 +1,15 @@
+<template>
+  <main class="portal">
+    <h1>{{ product }}</h1>
+    <p>Selected plan: {{ plan }}</p>
+    <button @click="choose">Choose professional</button>
+    <if condition="plan === 'professional'"><p>Thanks for upgrading.</p></if>
+  </main>
+</template>
+<script>
+export default {
+  data() { return { product: "Flaxon Portal", plan: "starter" }; },
+  methods: { choose() { this.plan = "professional"; } }
+}
+</script>
+<style scoped>.portal { min-height: 20rem; padding: 3rem; background: #f5f7fb; }</style>

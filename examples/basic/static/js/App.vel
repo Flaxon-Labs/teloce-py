@@ -1,0 +1,20 @@
+<template>
+  <main class="app">
+    <h1>{{ title }}</h1>
+    <p>Total tasks: {{ tasks.length }}</p>
+    <button @click="addTask">Add task</button>
+    <if condition="tasks.length > 0">
+      <ul><for item in tasks><li>{{ item }}</li></for></ul>
+    </if>
+  </main>
+</template>
+<script>
+export default {
+  data() { return { title: "Task board", tasks: ["Plan release", "Run tests"] }; },
+  methods: { addTask() { this.tasks.push("Review pull request"); } }
+}
+</script>
+<style scoped>
+.app { max-width: 42rem; margin: 2rem auto; font-family: sans-serif; }
+button { padding: .5rem 1rem; }
+</style>
