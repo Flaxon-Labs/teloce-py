@@ -119,18 +119,21 @@ teloce debug --port 9000 --host localhost
 teloce debug --no-open
 ```
 
-The current command is a debugger launcher placeholder. It discovers the
-project, prints `http://localhost:9000`, opens that URL unless `--no-open` is
-used, prints the planned debugger capabilities, and stays alive until
-`Ctrl+C`. It does **not** currently start an HTTP dashboard or provide a
-working component inspector, state viewer, or performance panel. Unless
-another service is already listening on that port, the browser will show a
-connection error.
+The command starts a localhost HTTP dashboard, opens it unless `--no-open` is
+used, and stays alive until `Ctrl+C`. The default port is `9000`.
 
-The default port is `9000`. A production debugger dashboard still needs a
-dashboard server, browser protocol, component registration, state snapshots,
-secure access control, and tests before this command can be described as a
-working debugger.
+The dashboard currently provides:
+
+- project name, root, Python version, platform, and Teloce version;
+- discovered `.vel` component paths;
+- compile diagnostics for every discovered component;
+- pass, error, and warning counts;
+- a refresh button that reruns diagnostics;
+- JSON endpoints at `/api/health`, `/api/project`, and `/api/diagnostics`.
+
+The dashboard is a local build and diagnostics inspector. It does not yet
+provide live runtime component state inspection or production telemetry. Keep
+it bound to localhost and do not expose it publicly without authentication.
 
 ## `teloce benchmark`
 

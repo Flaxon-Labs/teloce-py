@@ -18,8 +18,7 @@ Open the Python project root in VS Code, install the extension, and create
 not need to be installed on production servers.
 
 The upstream extension documents formatting, validation, and opening the
-debugger. In this Python repository, `teloce debug` is currently only a
-launcher placeholder and does not yet provide a dashboard server. Configure
-formatting and validation in VS Code settings, then keep compiler and browser
-tests in CI because editor diagnostics are not a replacement for a release
-build.
+debugger. In this Python repository, `teloce debug` starts the local diagnostics
+dashboard described in [CLI](cli.md). Configure formatting and validation in
+VS Code settings, then keep compiler and browser tests in CI because editor
+diagnostics are not a replacement for a release build.

@@ -10,6 +10,7 @@ from typing import Any
 
 from teloce.project.discovery import ProjectDiscovery
 from teloce.project.configuration import ProjectConfiguration
+from teloce.debug.dashboard import DebuggerDashboard
 
 
 def debug_command(args: Any) -> int:
@@ -41,7 +42,9 @@ def debug_command(args: Any) -> int:
     host = args.host or debug_config.get('host', 'localhost')
     open_browser = not args.no_open and debug_config.get('open', True)
     
-    url = f"http://{host}:{port}"
+    dashboard = DebuggerDashboard(discovery.root_dir, host=host, port=port)
+    dashboard.start()
+    url = dashboard.url
     
     print(f"📍 Debugger URL: {url}")
     print()
@@ -53,20 +56,21 @@ def debug_command(args: Any) -> int:
     
     print()
     print("🔧 Debugger features:")
-    print("   - Human-friendly error messages")
-    print("   - Component inspector")
-    print("   - Performance monitoring")
-    print("   - State viewer")
-    print("   - Error suggestions")
+    print("   - Project and environment information")
+    print("   - Discovered .vel component list")
+    print("   - Live compiler diagnostics")
+    print("   - Error and warning counts")
+    print("   - Refreshable local dashboard")
     print()
     print("Press Ctrl+C to stop")
     
     try:
-        # Keep running
+        # Keep the local dashboard alive until interrupted.
         import time
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        dashboard.close()
         print("\n🛑 Debugger stopped")
     
     return 0
