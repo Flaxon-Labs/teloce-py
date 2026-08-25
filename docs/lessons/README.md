@@ -13,6 +13,8 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 7. [Django: admin dashboards and imported components](07-django.md)
 8. [FastAPI: an async CMS with imported components](08-fastapi.md)
 9. [Flask: a server-rendered app with imported components](09-flask.md)
+10. [What the Flaxon OS production build proves](10-production-case-study.md)
+11. [PWA and MSIX packaging](11-pwa-and-msix.md)
 
 ## What you can build
 
