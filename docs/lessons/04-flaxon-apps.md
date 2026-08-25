@@ -2,6 +2,8 @@
 
 Flaxon provides the Python application layer. Teloce-Py compiles the `.vel` UI layer. A typical request flows like this:
 
+website made with .vel and flaxon: [https://flaxon-os.vercel.app/](https://flaxon-os.vercel.app/)
+
 ```text
 browser -> Flaxon route -> Python service/database -> JSON response -> .vel state -> rendered UI
 ```

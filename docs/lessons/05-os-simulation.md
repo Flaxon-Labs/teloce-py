@@ -2,6 +2,9 @@
 
 An OS simulation is a desktop metaphor implemented in the browser. It is not an operating-system kernel. It is a web application with a desktop surface, application windows, local storage, and a consistent interaction model.
 
+Os simulation made with .vel and flaxon: [https://flaxon-os.vercel.app/](https://flaxon-os.vercel.app/)
+here the repo link: [https://github.com/aldanedev-create/flaxon-os] (https://github.com/aldanedev-create/flaxon-os)
+
 ## Core architecture
 
 ```text
