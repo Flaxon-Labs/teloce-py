@@ -1,6 +1,7 @@
 """Real-browser router validation."""
 
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -14,6 +15,16 @@ from teloce.router.generator import RouterGenerator
 def _chrome() -> str | None:
     candidate = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
     return str(candidate) if candidate.exists() else None
+
+
+def _dump_dom(url: str):
+    with tempfile.TemporaryDirectory(prefix="teloce-router-chrome-") as profile:
+        return subprocess.run(
+            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
+             "--disable-extensions", "--no-first-run", "--no-default-browser-check",
+             f"--user-data-dir={profile}", "--dump-dom", "--virtual-time-budget=1500", url],
+            capture_output=True, text=True, timeout=20,
+        )
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome is not installed")
@@ -52,11 +63,7 @@ def test_generated_router_navigates_params_and_updates_view(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path, hmr=False)
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1500", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1")
         assert result.returncode == 0, result.stderr
         assert "<title>User:42:posts:a/b:none</title>" in result.stdout
     finally:

@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -18,6 +19,18 @@ def _chrome() -> str | None:
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     ]
     return next((candidate for candidate in candidates if candidate and Path(candidate).exists()), None)
+
+
+def _dump_dom(url: str, budget: int):
+    """Run Chrome with a disposable profile so an installed Chrome session cannot block CI."""
+    with tempfile.TemporaryDirectory(prefix="teloce-chrome-") as profile:
+        return subprocess.run(
+            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
+             "--disable-extensions", "--no-first-run", "--no-default-browser-check",
+             f"--user-data-dir={profile}", "--dump-dom",
+             f"--virtual-time-budget={budget}", url],
+            capture_output=True, text=True, timeout=20,
+        )
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
@@ -40,11 +53,7 @@ def test_generated_component_renders_and_reacts_in_real_chrome(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1000)
         assert result.returncode == 0, result.stderr
         assert "<title>1</title>" in result.stdout
     finally:
@@ -70,11 +79,7 @@ def test_keyed_loop_preserves_dom_nodes_when_items_reorder(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1200", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1200)
         assert result.returncode == 0, result.stderr
         assert "<title>yes:1:A</title>" in result.stdout
     finally:
@@ -99,11 +104,7 @@ def test_nested_loops_render_in_real_chrome(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1000)
         assert result.returncode == 0, result.stderr
         assert "A:1A:2" in result.stdout
     finally:
@@ -129,11 +130,7 @@ def test_css_module_dynamic_class_binding_works_in_real_chrome(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1000)
         assert result.returncode == 0, result.stderr
         assert "<title>card__App_" in result.stdout
     finally:
@@ -160,11 +157,7 @@ def test_component_hmr_preserves_state_in_real_chrome(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist", hmr=False)
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1500", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1500)
         assert result.returncode == 0, result.stderr
         assert "<title>7</title>" in result.stdout
     finally:
@@ -191,11 +184,7 @@ def test_npm_style_long_form_directives_render_in_real_chrome(tmp_path: Path):
     server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
     try:
         time.sleep(0.1)
-        result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
-             "--virtual-time-budget=1200", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1200)
         assert result.returncode == 0, result.stderr
         assert "<title>0:A1:B</title>" in result.stdout
     finally:

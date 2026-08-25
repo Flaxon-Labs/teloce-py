@@ -16,6 +16,71 @@ from teloce.ast.nodes import ASTNode, ElementNode, TextNode, InterpolationNode, 
 from teloce.sfc.component import Component
 
 
+SAFE_EXPRESSION_RUNTIME = r'''
+const __tokenize = source => {
+  const tokens = []; let index = 0; const text = String(source || "");
+  const operators = ["===", "!==", ">=", "<=", "&&", "||", "??", "==", "!=", "=>", "?."];
+  while (index < text.length) {
+    const current = text[index];
+    if (/\s/.test(current)) { index += 1; continue; }
+    if (current === "'" || current === '"') {
+      const quote = current; index += 1; let value = "";
+      while (index < text.length && text[index] !== quote) {
+        if (text[index] === "\\" && index + 1 < text.length) { const next = text[index + 1]; value += ({ n: "\n", r: "\r", t: "\t" }[next] ?? next); index += 2; }
+        else { value += text[index]; index += 1; }
+      }
+      index += 1; tokens.push({ type: "literal", value }); continue;
+    }
+    const number = text.slice(index).match(/^(?:\d+(?:\.\d*)?|\.\d+)/);
+    if (number) { tokens.push({ type: "literal", value: Number(number[0]) }); index += number[0].length; continue; }
+    const identifier = text.slice(index).match(/^[A-Za-z_$][\w$]*/);
+    if (identifier) { tokens.push({ type: "identifier", value: identifier[0] }); index += identifier[0].length; continue; }
+    const operator = operators.find(value => text.startsWith(value, index));
+    if (operator) { tokens.push({ type: "operator", value: operator }); index += operator.length; continue; }
+    tokens.push({ type: "operator", value: current }); index += 1;
+  }
+  tokens.push({ type: "eof", value: "" }); return tokens;
+};
+const __safeEvaluate = (expression, scope) => {
+  const tokens = __tokenize(expression); let cursor = 0;
+  const peek = () => tokens[cursor]; const take = value => { if (!value || peek().value === value) return tokens[cursor++]; return null; };
+  const lookup = name => {
+    if (name === "true") return true; if (name === "false") return false; if (name === "null") return null; if (name === "undefined") return undefined;
+    const builtins = { Math, Number, String, Boolean, Array, Object, JSON, Date, parseInt, parseFloat, isNaN, window: typeof window === "undefined" ? undefined : window, document: typeof document === "undefined" ? undefined : document };
+    if (Object.prototype.hasOwnProperty.call(scope || {}, name)) return scope[name];
+    return builtins[name];
+  };
+  const precedence = { "||": 1, "??": 1, "&&": 2, "==": 3, "!=": 3, "===": 3, "!==": 3, "<": 4, ">": 4, "<=": 4, ">=": 4, "+": 5, "-": 5, "*": 6, "/": 6, "%": 6 };
+  const primary = () => {
+    const token = take();
+    if (token.type === "literal") return token.value;
+    if (token.type === "identifier") return lookup(token.value);
+    if (token.value === "(") { const value = expressionParser(0); take(")"); return value; }
+    if (token.value === "[") { const values = []; while (peek().value !== "]" && peek().type !== "eof") { values.push(expressionParser(0)); if (!take(",")) break; } take("]"); return values; }
+    if (token.value === "{") { const result = {}; while (peek().value !== "}" && peek().type !== "eof") { const key = take(); const name = key.value; if (take(":")) result[name] = expressionParser(0); else result[name] = lookup(name); if (!take(",")) break; } take("}"); return result; }
+    return undefined;
+  };
+  const postfix = () => {
+    let value = primary(); let owner = null;
+    while (true) {
+      if (take(".") || take("?.")) { owner = value; const property = take(); value = value == null ? undefined : value[property.value]; continue; }
+      if (take("[")) { owner = value; const property = expressionParser(0); take("]"); value = value == null ? undefined : value[property]; continue; }
+      if (take("(")) { const args = []; while (peek().value !== ")" && peek().type !== "eof") { args.push(expressionParser(0)); if (!take(",")) break; } take(")"); if (typeof value === "function") value = value.apply(owner || scope, args); owner = null; continue; }
+      break;
+    }
+    return value;
+  };
+  const unary = () => { if (take("!")) return !unary(); if (take("-")) return -unary(); if (take("+")) return +unary(); if (peek().value === "typeof") { take(); return typeof unary(); } return postfix(); };
+  const apply = (operator, left, right) => { if (operator === "||") return left || right; if (operator === "&&") return left && right; if (operator === "??") return left ?? right; if (operator === "===") return left === right; if (operator === "!==") return left !== right; if (operator === "==") return left == right; if (operator === "!=") return left != right; if (operator === "<") return left < right; if (operator === ">") return left > right; if (operator === "<=") return left <= right; if (operator === ">=") return left >= right; if (operator === "+") return left + right; if (operator === "-") return left - right; if (operator === "*") return left * right; if (operator === "/") return left / right; if (operator === "%") return left % right; return left; };
+  const expressionParser = minimum => { let left = unary(); while (precedence[peek().value] >= minimum) { const operator = take().value; const right = expressionParser(precedence[operator] + 1); left = apply(operator, left, right); } if (minimum === 0 && take("?")) { const yes = expressionParser(0); take(":"); const no = expressionParser(0); left = left ? yes : no; } return left; };
+  return expressionParser(0);
+};
+const __splitEventStatements = source => { const result = []; let start = 0; let depth = 0; let quote = ""; let escaped = false; for (let index = 0; index < String(source).length; index += 1) { const character = String(source)[index]; if (quote) { if (escaped) escaped = false; else if (character === "\\") escaped = true; else if (character === quote) quote = ""; continue; } if (character === "\"" || character === "'") { quote = character; continue; } if ("([{".includes(character)) depth += 1; else if (")]}".includes(character)) depth -= 1; else if (character === "," && depth === 0) { result.push(String(source).slice(start, index).trim()); start = index + 1; } } result.push(String(source).slice(start).trim()); return result.filter(Boolean); };
+const __setSafePath = (expression, value, scope) => { const path = String(expression).trim().split(".").filter(Boolean); if (!path.length) return value; if (path.length === 1) scope[path[0]] = value; else { let target = scope[path[0]]; for (const part of path.slice(1, -1)) target = target?.[part]; if (target != null) target[path[path.length - 1]] = value; } return value; };
+const __runEventExpression = (expression, scope) => { let result; for (const statement of __splitEventStatements(expression)) { const update = statement.match(/^(.+?)\s*(\+\+|--)$/); if (update) { const current = __safeEvaluate(update[1], scope); result = __setSafePath(update[1], Number(current || 0) + (update[2] === "++" ? 1 : -1), scope); continue; } const assignment = statement.match(/^(.+?)\s*(\+=|-=|\*=|\/=|=)\s*(.+)$/); if (assignment) { const current = __safeEvaluate(assignment[1], scope); const next = __safeEvaluate(assignment[3], scope); const value = assignment[2] === "=" ? next : assignment[2] === "+=" ? current + next : assignment[2] === "-=" ? current - next : assignment[2] === "*=" ? current * next : current / next; result = __setSafePath(assignment[1], value, scope); continue; } result = __safeEvaluate(statement, scope); } return result; };
+'''
+
+
 class Generator:
     """
     Generates JavaScript code from the AST.
@@ -205,7 +270,8 @@ class Generator:
         component_map = ', '.join(f'{json.dumps(name)}: {name}' for name in imports)
         custom_filters = self._generate_js_filters()
         filter_suffix = f", {custom_filters}" if custom_filters else ""
-        return [
+        runtime = [
+            SAFE_EXPRESSION_RUNTIME,
             f'const __components = {{{component_map}}};',
             'const __readProps = (element, parentState) => {',
             '  const slots = { default: "" }; for (const child of Array.from(element.childNodes)) { if (child.nodeType === 1 && child.hasAttribute("slot")) { const name = child.getAttribute("slot") || "default"; slots[name] = (slots[name] || "") + child.outerHTML; } else { slots.default += child.outerHTML ?? child.textContent ?? ""; } }',
@@ -240,12 +306,14 @@ class Generator:
             '};',
             f'const __filters = {{ uppercase: value => String(value ?? "").toUpperCase(), lowercase: value => String(value ?? "").toLowerCase(), trim: value => String(value ?? "").trim(), capitalize: value => {{ const text = String(value ?? ""); return text ? text[0].toUpperCase() + text.slice(1) : text; }}, slugify: value => String(value ?? "").trim().toLowerCase().replace(/[^\\w\\s-]/g, "").replace(/[\\s_-]+/g, "-").replace(/^-+|-+$/g, ""), truncate: (value, length = 30, suffix = "...") => {{ const text = String(value ?? ""); const size = Number(length); return text.length > size ? text.slice(0, Math.max(0, size - String(suffix).length)) + suffix : text; }}, currency: (value, currency = "USD") => new Intl.NumberFormat(undefined, {{ style: "currency", currency: String(currency).toUpperCase() }}).format(Number(value) || 0), percent: (value, digits = 0) => `${{(Number(value) * 100).toFixed(Number(digits))}}%`, number: (value, locale) => new Intl.NumberFormat(locale || undefined).format(Number(value) || 0), first: value => Array.isArray(value) ? value[0] : value, last: value => Array.isArray(value) ? value[value.length - 1] : value, pluck: (value, key) => Array.isArray(value) ? value.map(item => item == null ? undefined : item[key]) : value, orderBy: (value, key, direction = "asc") => Array.isArray(value) ? [...value].sort((a, b) => {{ const left = key == null ? a : a?.[key]; const right = key == null ? b : b?.[key]; const result = left < right ? -1 : left > right ? 1 : 0; return String(direction).toLowerCase() === "desc" ? -result : result; }}) : value, json: value => JSON.stringify(value), join: (value, separator = ", ") => Array.isArray(value) ? value.join(separator) : value{filter_suffix} }};',
             f'const __dev = {str(bool(self.dev)).lower()};',
-            'const __evaluate = (expression, scope) => {',
+            'const __legacyEvaluate = (expression, scope) => {',
             '  try { const parts = String(expression).split(/\\s+\\|\\s+/); let value = Function("scope", `with (scope) { return (${parts.shift()}) }`)(scope); for (const filter of parts) { const match = filter.match(/^([\\w$]+)(?:\\((.*)\\)|(?::(.*)))?$/); const argumentsSource = match?.[2] ?? match?.[3]; if (match && __filters[match[1]]) value = __filters[match[1]](value, ...(argumentsSource ? Function(`return [${argumentsSource.replace(/:/g, ",")}]`)() : [])); } return value; }',
             '  catch (error) { if (__dev) console.error("Teloce expression error:", expression, error); return ""; }',
             '};',
+            'const __evaluate = (expression, scope) => { try { const parts = String(expression).split(/\\s+\\|\\s+/); let value = __safeEvaluate(parts.shift(), scope || {}); for (const filter of parts) { const match = filter.match(/^([\\w$]+)(?:\\((.*)\\)|(?::(.*)))?$/); const argumentsSource = match?.[2] ?? match?.[3]; if (match && __filters[match[1]]) value = __filters[match[1]](value, ...(argumentsSource ? argumentsSource.split(",").map(argument => __safeEvaluate(argument, scope || {})) : [])); } return value; } catch (error) { if (__dev) console.error("Teloce expression error:", expression, error); return ""; } };',
             "const __escapeHtml = (value) => String(value).replace(/[&<>\"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[character]));",
-            'const __assign = (expression, value, scope) => { try { Function("scope", "value", `with (scope) { ${expression} = value }`)(scope, value); } catch (_) {} };',
+            'const __legacyAssign = (expression, value, scope) => { try { Function("scope", "value", `with (scope) { ${expression} = value }`)(scope, value); } catch (_) {} };',
+            'const __assign = (expression, value, scope) => { try { const path = String(expression).trim().split(".").filter(Boolean); if (!path.length) return; if (path.length === 1) scope[path[0]] = value; else { let target = scope[path[0]]; for (const part of path.slice(1, -1)) target = target?.[part]; if (target != null) target[path[path.length - 1]] = value; } } catch (_) {} };',
             'const __mapClass = value => { const map = token => __styleClasses[token] || token; return Array.isArray(value) ? value.map(map).join(" ") : value && typeof value === "object" ? Object.keys(value).filter(key => value[key]).map(map).join(" ") : typeof value === "string" ? value.split(/\\s+/).filter(Boolean).map(map).join(" ") : value; };',
             'const __pluginDirectives = typeof globalThis !== "undefined" ? (globalThis.teloce?.directives || {}) : {};',
             'const __applyBinding = (element, name, value) => { if (name === "class") { element.className = __mapClass(value) ?? ""; } else if (name === "style" && value && typeof value === "object") { for (const [key, item] of Object.entries(value)) element.style[key] = item ?? ""; } else if (name === "show" || name === "hide") { element.hidden = name === "show" ? !Boolean(value) : Boolean(value); } else if (name === "html") { element.innerHTML = value == null ? "" : String(value); } else if (name === "text") { element.textContent = value == null ? "" : String(value); } else if (["disabled", "checked", "selected", "readonly", "required", "multiple"].includes(name)) { element.toggleAttribute(name, Boolean(value)); } else if (value === false || value == null) element.removeAttribute(name); else element.setAttribute(name, String(value)); };',
@@ -291,10 +359,11 @@ class Generator:
             '  if (typeof target === "string") target = document.querySelector(target);',
             '  if (!target) throw new Error("Teloce mount target was not found");',
             '  __installStyle();',
-            '  let update = () => {};',
+            '  let update = () => {}; let rendering = false; let updateQueued = false;',
+            '  const requestUpdate = () => { if (rendering) { updateQueued = true; return; } rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; queueMicrotask(requestUpdate); } } };',
             '  let mounted = false;',
             '  let previous = {};',
-            '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { set(object, key, value) { const old = object[key]; object[key] = value; update(); return true; } });',
+            '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { set(object, key, value) { object[key] = value; requestUpdate(); return true; } });',
             '  state.$style = __styleClasses;',
             '  for (const [name, getter] of Object.entries(__component.computed || {})) Object.defineProperty(state, name, { enumerable: true, get: () => getter.call(state) });',
             '  const methods = __component.methods || {};',
@@ -347,6 +416,7 @@ class Generator:
             'export const createApp = mount;',
             '__component.mount = mount;',
         ]
+        return [line.replace("else __evaluate(handlerName", "else __runEventExpression(handlerName") for line in runtime]
 
     def _component_imports(self, component: Component) -> dict:
         """Return local component names and their generated import paths."""
@@ -493,9 +563,10 @@ class Generator:
         children = self._generate_template(node.children)
         if node.key and node.key != "index":
             # Give the DOM reconciler a stable identity for each repeated row.
+            key_expression = node.key if "." in node.key or node.key == item else f"{item}.{node.key}"
             children = re.sub(
                 r"<([A-Za-z][\w:-]*)",
-                rf'<\1 data-teloce-key="{{{{ {item}.{node.key} }}}}"',
+                rf'<\1 data-teloce-key="{{{{ {key_expression} }}}}"',
                 children,
                 count=1,
             )

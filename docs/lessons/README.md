@@ -1,0 +1,44 @@
+# Teloce-Py and Flaxon lessons
+
+This learning path teaches the complete workflow: write a `.vel` Single File Component, compile it with Teloce-Py, connect it to a Python application, and grow it into a real Flaxon application or desktop-style web app.
+
+## Learning path
+
+1. [Your first `.vel` component](01-first-vel.md)
+2. [Templates, directives, events, and state](02-vel-building-blocks.md)
+3. [Components, CSS, JavaScript, and reusable design](03-components-and-design.md)
+4. [Build a Flaxon application with Python](04-flaxon-apps.md)
+5. [Create a real OS-style simulation](05-os-simulation.md)
+6. [Production delivery and developer workflow](06-production.md)
+
+## What you can build
+
+`.vel` files are useful for dashboards, forms, admin tools, study systems, media interfaces, browser IDEs, PWAs, monitoring consoles, and desktop-style web applications. Python remains responsible for the server, APIs, data, authentication, background jobs, and framework integration; the `.vel` layer owns interactive browser UI.
+
+Teloce-Py is designed to make the fast path small:
+
+```text
+write .vel -> run the compiler -> serve the generated JavaScript -> use Python normally
+```
+
+You do not need to replace Flask, FastAPI, Django, or another Python framework. Teloce-Py generates browser assets that any framework can serve.
+
+## Original and compatible APIs
+
+The original Teloce API remains useful:
+
+```html
+<button @click="count++">Clicked {{ count }} times</button>
+<if condition="visible">Shown when visible</if>
+<for item="task" in="tasks">{{ task.title }}</for>
+```
+
+Compatible aliases are also available in modern components:
+
+```html
+<button @click="count++">Clicked {{ count }} times</button>
+<p v-if="visible">Shown when visible</p>
+<article v-for="task in tasks" :key="task.id">{{ task.title }}</article>
+```
+
+Keep the syntax style that fits your existing Teloce project. The original API is not removed when aliases are used.

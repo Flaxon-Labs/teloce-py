@@ -47,6 +47,7 @@ export default {
         result = compile(source)
         assert result['success'] is True
         assert 'message' in result['code']
+        assert '__safeEvaluate' in result['code']
 
     def test_compile_with_event(self):
         """Test compilation with event binding."""
