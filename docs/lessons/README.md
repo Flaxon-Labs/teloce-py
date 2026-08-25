@@ -10,6 +10,9 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 4. [Build a Flaxon application with Python](04-flaxon-apps.md)
 5. [Create a real OS-style simulation](05-os-simulation.md)
 6. [Production delivery and developer workflow](06-production.md)
+7. [Django: admin dashboards and imported components](07-django.md)
+8. [FastAPI: an async CMS with imported components](08-fastapi.md)
+9. [Flask: a server-rendered app with imported components](09-flask.md)
 
 ## What you can build
 
