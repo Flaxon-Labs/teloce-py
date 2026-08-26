@@ -24,6 +24,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 18. [Build the Teloce Motion Lab showcase](18-teloce-showcase.md)
 19. [Signals, reactivity, and the browser runtime](19-signals-and-reactivity.md)
 20. [Build a Flaxon notebook with the standalone runtime](20-flaxon-runtime-notebook.md)
+21. [Runtime file reference and router guide](21-runtime-files-and-router.md)
 
 ## What you can build
 

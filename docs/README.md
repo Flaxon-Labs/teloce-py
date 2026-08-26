@@ -37,6 +37,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [Teloce Motion Lab showcase](lessons/18-teloce-showcase.md) — [open the live website](https://teloce-showcase.vercel.app/)
 - [Signals and reactivity](lessons/19-signals-and-reactivity.md)
 - [Flaxon runtime notebook](lessons/20-flaxon-runtime-notebook.md)
+- [Runtime files and router guide](lessons/21-runtime-files-and-router.md)
 - [PySeek live search-engine showcase](lessons/12-search-engine-showcase.md)
 
 ## Reference pages
