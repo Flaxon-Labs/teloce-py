@@ -38,6 +38,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [Signals and reactivity](lessons/19-signals-and-reactivity.md)
 - [Flaxon runtime notebook](lessons/20-flaxon-runtime-notebook.md)
 - [Runtime files and router guide](lessons/21-runtime-files-and-router.md)
+- [Build a working Vel IDE with `.vel` and Flask](lessons/22-build-a-vel-ide.md) — [source repository](https://github.com/aldanedev-create/vel-ide)
 - [PySeek live search-engine showcase](lessons/12-search-engine-showcase.md)
 
 ## Reference pages

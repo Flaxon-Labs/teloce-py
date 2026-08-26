@@ -25,6 +25,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 19. [Signals, reactivity, and the browser runtime](19-signals-and-reactivity.md)
 20. [Build a Flaxon notebook with the standalone runtime](20-flaxon-runtime-notebook.md)
 21. [Runtime file reference and router guide](21-runtime-files-and-router.md)
+22. [Build a working Vel IDE with `.vel` and Flask](22-build-a-vel-ide.md)
 
 ## What you can build
 

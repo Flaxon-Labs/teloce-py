@@ -218,6 +218,41 @@ Render a loading/error panel with `v-if="loading || error"`. Keep the import ver
 
 ## Router navigation problems
 
+## Vel IDE: `Identifier '.default' has already been declared`
+
+This occurred in the Vel IDE when a `.vel` script contained a top-level helper declaration before `export default`. The compiler preserved the script and also emitted the component definition, so the module declared the default component twice. Keep helper values inside `data()` or component methods when the compiler version has this limitation. For example:
+
+```html
+<script>
+export default {
+  data() { return { starter: [String.fromCharCode(60) + 'template>', String.fromCharCode(60) + '/template>'].join(String.fromCharCode(10)) } }
+}
+</script>
+```
+
+After changing the component, rebuild and run `node --check dist/static/js/components/EditorShell.js`. Import that generated module directly in DevTools if the page is still blank; the first failing module is usually the source of the problem.
+
+## Vel IDE: Monaco does not appear
+
+Do not assume that any existing `window.require` is Monaco's AMD loader. Some pages or tools define their own `require` function. Check `window.monaco?.editor` first; otherwise load the pinned Monaco loader script and initialize Monaco in `mounted()`. Confirm the CDN requests return HTTP 200 and that `window.monaco.editor.getModels().length` becomes greater than zero.
+
+## Vel IDE: compile button says failed
+
+Check the response from `POST /api/compile`, not only the button label. A successful response is HTTP 200 with `ok: true`; malformed `.vel` source should be HTTP 422 with `diagnostics.errors`. If the editor value contains literal `\\n` characters instead of real newlines, construct the source with `String.fromCharCode(10)` or a real newline before submitting it. Never silently discard compiler diagnostics.
+
+## Vel IDE: blank screen but Flask returns 200
+
+A 200 HTML response only proves that the shell arrived. Verify, in order:
+
+1. `/static/js/App.js` returns 200 and `text/javascript`.
+2. Every imported child module returns 200.
+3. `node --check` passes for the generated entry and editor module.
+4. The browser console has no module parse error.
+5. `mount(document.querySelector('#app'))` is called.
+6. Monaco is loaded after the editor component mounts.
+
+The most useful browser test is to load the page at desktop and mobile widths, count `#app .ide`, and inspect `pageerror` events. A responsive layout should not have `document.documentElement.scrollWidth > window.innerWidth`.
+
 When one route works and another is blank, inspect the hash/history URL and the generated router:
 
 ```js
