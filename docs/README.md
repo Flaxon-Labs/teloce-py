@@ -35,6 +35,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [How Teloce-Py works under the hood](lessons/16-how-teloce-works.md)
 - [CLI workflow](lessons/17-cli-workflow.md)
 - [Teloce Motion Lab showcase](lessons/18-teloce-showcase.md) — [open the live website](https://teloce-showcase.vercel.app/)
+- [Signals and reactivity](lessons/19-signals-and-reactivity.md)
 - [PySeek live search-engine showcase](lessons/12-search-engine-showcase.md)
 
 ## Reference pages
