@@ -44,7 +44,7 @@
           </nav>
         </aside>
         <section class="editor">
-          <p class="eyebrow">Standalone Teloce runtime</p>
+          <p class="eyebrow">Standalone Teloce runtime · <span id="save-state">Ready</span></p>
           <form @submit.prevent="saveFromForm">
             <input id="note-title" aria-label="Note title" value="{{ activeTitle }}" placeholder="Untitled note">
             <textarea id="note-body" aria-label="Note body" placeholder="Start writing..."></textarea>
@@ -58,7 +58,13 @@
       {% endraw %}
     </div>
     <script src="/assets/teloce-standalone.js"></script>
-    <script>
+    <script type="module">
+      import { createSignal, createEffect } from '/assets/signals.js'
+
+      const saveState = createSignal('Ready')
+      const statusElement = document.querySelector('#save-state')
+      createEffect(() => { statusElement.textContent = saveState() })
+
       const initialNotes = [
         { id: 1, title: 'Welcome', body: 'This notebook is rendered by Flaxon and made reactive by the Teloce runtime.' },
         { id: 2, title: 'Ideas', body: 'Replace this in-memory state with a database or IndexedDB for a larger application.' }
@@ -75,6 +81,7 @@
         selectNote(id) {
           this.activeId = id
           this.activeTitle = this.notes.find(item => item.id === id)?.title || ''
+          saveState.set('Editing')
           requestAnimationFrame(() => {
             const note = this.notes.find(item => item.id === id)
             document.querySelector('#note-body').value = note?.body || ''
@@ -83,6 +90,7 @@
         newNote() {
           this.activeId = null
           this.activeTitle = ''
+          saveState.set('New note')
           requestAnimationFrame(() => {
             document.querySelector('#note-title').value = ''
             document.querySelector('#note-body').value = ''
@@ -103,12 +111,14 @@
             if (note) { note.title = title; note.body = body }
             this.activeTitle = title
           }
+          saveState.set('Saved')
         },
         deleteNote() {
           if (this.activeId == null) return
           this.notes = this.notes.filter(note => note.id !== this.activeId)
           this.activeId = this.notes[0]?.id ?? null
           this.activeTitle = this.notes[0]?.title || ''
+          saveState.set('Deleted')
           requestAnimationFrame(() => {
             const note = this.notes.find(item => item.id === this.activeId)
             document.querySelector('#note-body').value = note?.body || ''

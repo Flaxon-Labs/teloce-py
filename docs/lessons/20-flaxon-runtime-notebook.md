@@ -1,6 +1,6 @@
 # Lesson 20: Build a Flaxon notebook with the standalone runtime
 
-This small example adds Teloce behavior to HTML rendered by Flaxon and Jinax. It is useful for beginners because there is no compiler configuration and no frontend build tool: Python serves the page, the standalone runtime finds the mount element, and browser state makes the notebook interactive.
+This small example adds Teloce behavior to HTML rendered by Flaxon and Jinax. It is useful for beginners because there is no compiler configuration and no frontend build tool: Python serves the page, the standalone runtime finds the mount element, browser state makes the notebook interactive, and an explicit signal drives the save-status indicator.
 
 The complete example is in [`examples/flaxon-runtime-notebook`](../../examples/flaxon-runtime-notebook/).
 
@@ -94,7 +94,7 @@ async def health():
     return {'ok': True, 'service': 'runtime-notebook'}
 ```
 
-The asset route exposes `dist/teloce-standalone.js` as `/assets/teloce-standalone.js`. The browser can only use the runtime after the Python server gives it a URL.
+The asset route exposes `dist/teloce-standalone.js` as `/assets/teloce-standalone.js`. The browser can only use the runtime after the Python server gives it a URL. The signals example also exposes `dist/signals.js` and `dist/scheduler.js` as browser modules.
 
 ## Step 4: mount the runtime in Jinax
 
@@ -137,6 +137,26 @@ Create `templates/index.html`:
 ```
 
 The `{{ title }}` in the document head is Jinax server interpolation. The `{{ note.title }}` inside the mounted application is Teloce interpolation. Keep that distinction in mind: Jinax runs in Python before the response reaches the browser; Teloce runs in the browser after the runtime mounts. The `{% raw %}` block prevents Jinax from trying to evaluate Teloce expressions on the server.
+
+## Add signals to the notebook
+
+The complete example uses explicit signals for a small piece of shared browser state: the save-status label. The build copies `signals.js` and its `scheduler.js` dependency into `dist/`, and the page imports them as an ES module:
+
+```html
+<p id="save-state">Ready</p>
+<script type="module">
+  import { createSignal, createEffect } from '/assets/signals.js'
+
+  const saveState = createSignal('Ready')
+  const label = document.querySelector('#save-state')
+  createEffect(() => { label.textContent = saveState() })
+
+  saveState.set('Editing')
+  saveState.set('Saved')
+</script>
+```
+
+The notebook calls `saveState.set('Editing')` when a note is selected, `saveState.set('New note')` when creating one, and `saveState.set('Saved')` after saving. Component-style notebook data still uses the standalone runtime proxy; the signal is useful because it is independently observable by the status effect. In a larger application, keep the effect stop function and call it when the page or feature is destroyed.
 
 ## Step 5: run the complete notebook example
 
