@@ -143,6 +143,7 @@ Compatibility is a contract to test, not a claim that every third-party npm plug
 - [`.vel` language and SFC structure](docs/vel-syntax.md)
 - [Framework integration](docs/frameworks.md)
 - [Production deployment](docs/production.md)
+- [PySeek live search-engine showcase](docs/lessons/12-search-engine-showcase.md) — [try it live](https://pyseek.vercel.app)
 - [Components, imports, slots, and props](docs/components.md)
 - [Plugins, filters, and directives](docs/plugins.md)
 - [Router and runtime](docs/router.md)

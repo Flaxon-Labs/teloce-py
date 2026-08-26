@@ -2,6 +2,12 @@
 
 PySeek is a real reference application built with imported `.vel` files, Flaxon routes, a crawler, PostgreSQL full-text search, IndexedDB history, and Vercel deployment. It proves that `.vel` can power a data-heavy tool, not only a landing page.
 
+## Try the live search engine
+
+Open the production showcase at **[https://pyseek.vercel.app](https://pyseek.vercel.app)**. The main search box searches PySeek’s indexed pages. The **Search beyond the PySeek index** panel opens Google web results in a new tab.
+
+Source code: [aldanedev-create/pyseek on GitHub](https://github.com/aldanedev-create/pyseek).
+
 ## What it proves
 
 - `.vel` imports scale into a component tree;

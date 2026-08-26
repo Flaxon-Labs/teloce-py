@@ -27,6 +27,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [Animation and Three.js lesson](lessons/13-animation-and-threejs.md)
 - [Demo UI framework lesson](lessons/14-demo-framework.md)
 - [Plugin authoring lesson](lessons/15-plugin-authoring.md)
+- [PySeek live search-engine showcase](lessons/12-search-engine-showcase.md)
 
 ## Reference pages
 
