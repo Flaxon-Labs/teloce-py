@@ -15,6 +15,7 @@ from backend.routes.generation import register_generation
 from backend.routes.health import register_health
 from backend.routes.preview import register_preview
 from backend.routes.projects import register_projects
+from backend.routes.pages import register_pages
 
 ROOT = Path(__file__).resolve().parent
 app = Flaxon("teloce-studio", debug=os.getenv("FLAXON_DEBUG", "false").lower() == "true")
@@ -53,6 +54,7 @@ async def service_worker(request):
 
 register_health(app)
 register_projects(app)
+register_pages(app)
 register_generation(app)
 register_preview(app)
 register_assets(app)

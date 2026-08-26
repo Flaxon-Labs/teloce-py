@@ -33,7 +33,7 @@ def build_frontend():
         for item in source.rglob("*"):
             if item.is_file():
                 destination = target / item.relative_to(source); destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(item, destination)
-    for name in ("manifest.webmanifest", "sw.js", "offline.html"):
+    for name in ("manifest.webmanifest", "sw.js", "offline.html", "studio-interactions.js"):
         source = ROOT / "editor" / "public" / name
         if source.exists(): shutil.copy2(source, public / name)
     return result

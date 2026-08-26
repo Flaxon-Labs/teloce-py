@@ -37,14 +37,19 @@ def _render_bindings(model: dict) -> str:
 
 def generate_project(model: dict) -> dict:
     root = _project_dir(model["id"])
-    page = (model.get("pages") or [{"file": "static/js/pages/Home.vel", "name": "Home"}])[0]
-    page_file = page.get("file", "static/js/pages/Home.vel")
-    page_path = contained(root, root / page_file)
-    page_path.parent.mkdir(parents=True, exist_ok=True)
     title = model.get("name", "Flaxon App")
-    page_path.write_text(f'''<template>\n  <main class="page-shell">\n    {_render_elements(model)}\n  </main>\n</template>\n''', encoding="utf-8")
+    pages = model.get("pages") or [{"id": "home", "file": "static/js/pages/Home.vel", "name": "Home", "path": "/"}]
+    imports = []
+    for page in pages:
+        page_file = page.get("file") or "static/js/pages/" + str(page.get("id", "page")) + ".vel"
+        page_path = contained(root, root / page_file)
+        page_path.parent.mkdir(parents=True, exist_ok=True)
+        page_path.write_text(f'''<template>\n  <main class="page-shell" data-page="{_escape(page.get("path", "/"))}">\n    {_render_elements(model)}\n  </main>\n</template>\n''', encoding="utf-8")
+        component = "Page" + str(page.get("id", "home")).replace("-", "_")
+        imports.append(f"import {component} from './pages/{Path(page_file).stem}.vel'")
+    first_component = "Page" + str(pages[0].get("id", "home")).replace("-", "_")
     (root / "static" / "js").mkdir(parents=True, exist_ok=True)
-    (root / "static" / "js" / "App.vel").write_text("<script>\nimport Home from './pages/Home.vel'\n</script>\n<template><Home /></template>\n", encoding="utf-8")
+    (root / "static" / "js" / "App.vel").write_text("<script>\n" + "\n".join(imports) + f"\n</script>\n<template><{first_component} /></template>\n", encoding="utf-8")
     (root / "static" / "css").mkdir(parents=True, exist_ok=True)
     (root / "static" / "css" / "app.css").write_text(":root{font-family:system-ui,sans-serif;color:#eef2ff;background:#0b1020}body{margin:0}.page-shell{padding:4rem;max-width:70rem;margin:auto}\n", encoding="utf-8")
     binding_routes = _render_bindings(model)
