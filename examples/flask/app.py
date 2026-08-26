@@ -4,7 +4,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template
 from teloce.build import build_project
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 
 def create_app() -> Flask:

@@ -1,7 +1,7 @@
 from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).resolve().parent
 messages = [
     {"id": 1, "author": "system", "body": "Welcome to the Flask chat demo."},
 ]
