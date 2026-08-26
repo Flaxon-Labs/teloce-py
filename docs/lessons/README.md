@@ -19,6 +19,9 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 13. [CSS animation and Three.js in `.vel`](13-animation-and-threejs.md)
 14. [Build a demo UI framework with `.vel`](14-demo-framework.md)
 15. [Create a reusable Teloce plugin](15-plugin-authoring.md)
+16. [How Teloce-Py works under the hood](16-how-teloce-works.md)
+17. [The Teloce CLI from first build to production](17-cli-workflow.md)
+18. [Build the Teloce Motion Lab showcase](18-teloce-showcase.md)
 
 ## What you can build
 
