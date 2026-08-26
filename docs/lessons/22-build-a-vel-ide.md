@@ -213,7 +213,25 @@ curl -X POST http://127.0.0.1:5179/api/compile \
 
 The second request should return HTTP 422 and a diagnostic explaining the missing closing `div`. This is the same failure path used by Vel IDE's Problems panel.
 
-## Part 7 — deployment and team workflow
+## Part 7 — protect third-party editor DOM from rerenders
+
+Monaco owns a large DOM subtree. If its instance is stored in reactive state, changing a status message can cause a Teloce rerender that replaces Monaco's host. The editor model may still exist while the visible editor is gone. Keep the Monaco instance non-reactive and dispose it when the component unmounts:
+
+```html
+<script>
+export default {
+  mounted() {
+    const host = document.querySelector('#editor')
+    window.myEditor = window.monaco.editor.create(host, { value: '', language: 'html' })
+  },
+  beforeUnmount() { window.myEditor?.dispose(); window.myEditor = null }
+}
+</script>
+```
+
+Give the host and its grid row a real height (`height: 100%; min-height: 0`). Test the result by checking that the editor has a non-zero bounding box, typing into Monaco, and compiling the typed source.
+
+## Part 8 — deployment and team workflow
 
 Commit source `.vel` files and build configuration. Either commit `dist/` or run `python build.py` in the deployment build command. On Vercel, use a Python entry point for Flask and ensure the generated static directory matches the Flask `static_folder`.
 

@@ -236,6 +236,8 @@ After changing the component, rebuild and run `node --check dist/static/js/compo
 
 Do not assume that any existing `window.require` is Monaco's AMD loader. Some pages or tools define their own `require` function. Check `window.monaco?.editor` first; otherwise load the pinned Monaco loader script and initialize Monaco in `mounted()`. Confirm the CDN requests return HTTP 200 and that `window.monaco.editor.getModels().length` becomes greater than zero.
 
+If the Monaco model exists but the editor is invisible, inspect the host's computed height and inspect whether Teloce replaced its children after a state update. A component rerender can detach Monaco's DOM even though its model remains alive. Keep the editor instance in a non-reactive reference such as `window.velIdeEditor` or a host property, set the editor host's `height: 100%`, and update status text directly when necessary. Dispose that reference in `beforeUnmount()`.
+
 ## Vel IDE: compile button says failed
 
 Check the response from `POST /api/compile`, not only the button label. A successful response is HTTP 200 with `ok: true`; malformed `.vel` source should be HTTP 422 with `diagnostics.errors`. If the editor value contains literal `\\n` characters instead of real newlines, construct the source with `String.fromCharCode(10)` or a real newline before submitting it. Never silently discard compiler diagnostics.
