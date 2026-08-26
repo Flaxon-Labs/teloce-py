@@ -23,9 +23,9 @@ Teloce gives that layer a small, inspectable component model:
 
 ```bash
 git clone https://github.com/aldanedev-create/teloce-py.git
-cd teloce-python
+cd teloce-py
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
 # macOS/Linux: source .venv/bin/activate
 python -m pip install -e .
 ```
@@ -56,20 +56,23 @@ export default {
 </style>
 ```
 
-Compile a file or a project:
+Build the project from its root directory:
 
 ```bash
-teloce compile static/js/App.vel -o static/js/App.js
-teloce build . --out-dir dist --source-map
-teloce dev . --port 5173
+python -X utf8 -m teloce.cli.main build --out-dir dist --source-map
 ```
 
-The generated `App.js` is a browser module. Put a mount point in your server template:
+The generated browser module is written to `dist/static/js/App.js`. Put a mount point in your server template:
 
 ```html
 <div id="app"></div>
-<script type="module" src="/static/js/App.js"></script>
+<script type="module">
+  import { mount } from "/static/js/App.js";
+  mount("#app");
+</script>
 ```
+
+For development, run `teloce dev --port 5173` in a frontend-only project. When using Flask, FastAPI, Django, or Flaxon, run that framework's server and invoke `python -X utf8 -m teloce.cli.main build` as part of the application build step. The `-X utf8` flag keeps the CLI output working in Windows consoles that use a legacy code page.
 
 The complete framework examples are in [`examples/`](examples/), and the walkthroughs are in [`docs/`](docs/).
 
@@ -79,7 +82,7 @@ From a new project directory, install Teloce and Flask:
 
 ```bash
 python -m pip install teloce-py Flask
-mkdir -p static/js templates
+python -c "from pathlib import Path; Path('static/js').mkdir(parents=True, exist_ok=True); Path('templates').mkdir(exist_ok=True)"
 ```
 
 Create `static/js/App.vel`:
@@ -88,12 +91,17 @@ Create `static/js/App.vel`:
 <template>
   <main class="app">
     <h1>{{ message }}</h1>
-    <button @click="message = 'Updated in the browser'">Update</button>
+    <button @click="updateMessage">Update</button>
   </main>
 </template>
 
 <script>
-export default { data() { return { message: "Hello from .vel" }; } };
+export default {
+  data() { return { message: "Hello from .vel" }; },
+  methods: {
+    updateMessage() { this.message = "Updated in the browser"; }
+  }
+};
 </script>
 ```
 
@@ -112,18 +120,21 @@ if __name__ == "__main__":
     app.run(debug=True)
 ```
 
-Create `templates/index.html`, then compile and run:
+Create `templates/index.html`, then build and run:
 
 ```html
 <!doctype html>
 <html><body>
   <div id="app"></div>
-  <script type="module" src="{{ url_for('static', filename='js/App.js') }}"></script>
+  <script type="module">
+    import { mount } from "{{ url_for('static', filename='js/App.js') }}";
+    mount("#app");
+  </script>
 </body></html>
 ```
 
 ```bash
-teloce compile static/js/App.vel -o static/js/App.js
+python -X utf8 -m teloce.cli.main build --out-dir dist --source-map
 python app.py
 ```
 
