@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: #10131d; color: #f3f5ff; font: 1rem/1.5 system-ui, sans-serif; }
+      button, input, textarea { font: inherit; }
+      button { cursor: pointer; }
+      .app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
+      .sidebar { padding: 1.25rem; border-right: 1px solid #293044; background: #151925; }
+      .brand { margin: 0 0 1.5rem; font-size: 1.25rem; }
+      .brand span { color: #8ce3d2; }
+      .new { width: 100%; border: 0; border-radius: .6rem; padding: .7rem; background: #8ce3d2; color: #10201f; font-weight: 800; }
+      .notes { display: grid; gap: .35rem; margin-top: 1.2rem; }
+      .note-link { width: 100%; overflow: hidden; border: 1px solid transparent; border-radius: .5rem; padding: .7rem; background: transparent; color: #c3c9db; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+      .note-link:hover, .note-link.active { border-color: #465371; background: #20283b; color: white; }
+      .editor { width: min(48rem, 100%); padding: clamp(1.5rem, 5vw, 5rem); }
+      .eyebrow { color: #8ce3d2; font-size: .72rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+      input, textarea { width: 100%; border: 1px solid #35405b; border-radius: .7rem; background: #171c2a; color: #f3f5ff; outline: none; }
+      input { margin: .6rem 0 1rem; padding: .9rem 1rem; font-size: clamp(1.5rem, 4vw, 2.5rem); font-weight: 800; }
+      textarea { min-height: 22rem; padding: 1rem; resize: vertical; }
+      input:focus, textarea:focus { border-color: #8ce3d2; box-shadow: 0 0 0 3px #8ce3d233; }
+      .actions { display: flex; gap: .7rem; margin-top: 1rem; }
+      .save, .delete { border: 0; border-radius: .55rem; padding: .65rem 1rem; font-weight: 800; }
+      .save { background: #c9b7ff; color: #1b1731; }
+      .delete { background: #33212e; color: #ffb7c8; }
+      .empty { color: #8d96ae; }
+      @media (max-width: 700px) { .app { grid-template-columns: 1fr; } .sidebar { border-right: 0; border-bottom: 1px solid #293044; } .notes { display: flex; overflow-x: auto; } .note-link { min-width: 10rem; } .editor { padding: 2rem 1.25rem; } }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <main class="app">
+        <aside class="sidebar">
+          <h1 class="brand">Flaxon <span>Notebook</span></h1>
+          <button class="new" @click="newNote">+ New note</button>
+          <nav class="notes" aria-label="Notes">
+            <p class="empty" v-if="notes.length === 0">No notes yet.</p>
+            <button class="note-link" v-for="note in notes" :key="note.id" @click="selectNote(note.id)" :class="{ active: activeId === note.id }">{{ note.title }}</button>
+          </nav>
+        </aside>
+        <section class="editor">
+          <p class="eyebrow">Standalone Teloce runtime</p>
+          <form @submit.prevent="saveFromForm">
+            <input id="note-title" aria-label="Note title" value="{{ activeTitle }}" placeholder="Untitled note">
+            <textarea id="note-body" aria-label="Note body" placeholder="Start writing..."></textarea>
+            <div class="actions">
+              <button class="save" type="submit">Save note</button>
+              <button class="delete" type="button" @click="deleteNote">Delete</button>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/teloce-standalone.js"></script>
+    <script>
+      const initialNotes = [
+        { id: 1, title: 'Welcome', body: 'This notebook is rendered by Flaxon and made reactive by the Teloce runtime.' },
+        { id: 2, title: 'Ideas', body: 'Replace this in-memory state with a database or IndexedDB for a larger application.' }
+      ]
+
+      teloce.createApp('#app', {
+        notes: initialNotes,
+        activeId: 1,
+        activeTitle: initialNotes[0].title,
+        nextId: 3,
+        get activeTitle() {
+          return this.notes.find(note => note.id === this.activeId)?.title || ''
+        },
+        selectNote(id) {
+          this.activeId = id
+          this.activeTitle = this.notes.find(item => item.id === id)?.title || ''
+          requestAnimationFrame(() => {
+            const note = this.notes.find(item => item.id === id)
+            document.querySelector('#note-body').value = note?.body || ''
+          })
+        },
+        newNote() {
+          this.activeId = null
+          this.activeTitle = ''
+          requestAnimationFrame(() => {
+            document.querySelector('#note-title').value = ''
+            document.querySelector('#note-body').value = ''
+            document.querySelector('#note-title').focus()
+          })
+        },
+        saveFromForm(event) {
+          event.preventDefault()
+          const title = document.querySelector('#note-title').value.trim() || 'Untitled note'
+          const body = document.querySelector('#note-body').value
+          if (this.activeId == null) {
+            this.activeId = this.nextId
+            this.nextId++
+            this.notes.push({ id: this.activeId, title, body })
+            this.activeTitle = title
+          } else {
+            const note = this.notes.find(item => item.id === this.activeId)
+            if (note) { note.title = title; note.body = body }
+            this.activeTitle = title
+          }
+        },
+        deleteNote() {
+          if (this.activeId == null) return
+          this.notes = this.notes.filter(note => note.id !== this.activeId)
+          this.activeId = this.notes[0]?.id ?? null
+          this.activeTitle = this.notes[0]?.title || ''
+          requestAnimationFrame(() => {
+            const note = this.notes.find(item => item.id === this.activeId)
+            document.querySelector('#note-body').value = note?.body || ''
+          })
+        }
+      })
+
+      document.querySelector('#note-body').value = initialNotes[0].body
+    </script>
+  </body>
+</html>

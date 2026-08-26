@@ -11,5 +11,6 @@ Every example is intended to be copied into a new project. From the repository r
 | `django-scanner` | Django defensive scanner UI | `python build.py`, then `python manage.py runserver` |
 | `flaxon` | Flaxon + Jinax + `.vel` | `python build.py`, then `python -m flaxon run app:app --reload` |
 | `flaxon-network` | Flaxon JSON and WebSocket routes | `python build.py`, then `python -m flaxon run app:app --reload` |
+| `flaxon-runtime-notebook` | Flaxon + Jinax + standalone Teloce runtime notebook | `python build.py`, then `python -m flaxon run app:app --reload` |
 
 Run commands from the example directory. The examples use local in-memory data where appropriate; replace that storage with your production database and security controls before deployment.

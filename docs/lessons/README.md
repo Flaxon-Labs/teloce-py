@@ -23,6 +23,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 17. [The Teloce CLI from first build to production](17-cli-workflow.md)
 18. [Build the Teloce Motion Lab showcase](18-teloce-showcase.md)
 19. [Signals, reactivity, and the browser runtime](19-signals-and-reactivity.md)
+20. [Build a Flaxon notebook with the standalone runtime](20-flaxon-runtime-notebook.md)
 
 ## What you can build
 
