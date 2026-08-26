@@ -24,6 +24,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [npm migration](npm-migration.md)
 - [VS Code](vscode.md)
 - [Real-world examples](real-world-examples.md)
+- [Animation and Three.js lesson](lessons/13-animation-and-threejs.md)
 
 ## Reference pages
 

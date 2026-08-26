@@ -16,6 +16,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 10. [What the Flaxon OS production build proves](10-production-case-study.md)
 11. [PWA and MSIX packaging](11-pwa-and-msix.md)
 12. [Build a small search engine with `.vel`](12-search-engine-showcase.md)
+13. [CSS animation and Three.js in `.vel`](13-animation-and-threejs.md)
 
 ## What you can build
 
