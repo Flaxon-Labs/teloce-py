@@ -1,0 +1,1 @@
+<template><section class="preview-frame" aria-label="Live preview"><slot></slot></section></template>

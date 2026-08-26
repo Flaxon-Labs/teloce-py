@@ -1,0 +1,6 @@
+<template>
+  <main class="studio-shell" aria-label="Teloce Studio">
+    <h1>Teloce Studio</h1>
+    <p>Visual editor workspace placeholder.</p>
+  </main>
+</template>

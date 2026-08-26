@@ -1,0 +1,1 @@
+<template><aside class="component-tree" aria-label="Component tree"><slot></slot></aside></template>
