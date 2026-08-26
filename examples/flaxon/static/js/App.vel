@@ -1,9 +1,9 @@
 <template>
   <main class="portal">
-    <h1>{{ product }}</h1>
-    <p>Selected plan: {{ plan }}</p>
-    <button @click="choose">Choose professional</button>
-    <if condition="plan === 'professional'"><p>Thanks for upgrading.</p></if>
+    <p class="eyebrow">Flaxon + Jinax</p><h1>{{ product }}</h1>
+    <div class="plan"><span class="plan-icon">✦</span><div><strong>{{ plan === "professional" ? "Professional plan" : "Starter plan" }}</strong><p>{{ plan === "professional" ? "Everything is ready to ship." : "A simple starting point for your app." }}</p></div></div>
+    <button @click="choose">{{ plan === "professional" ? "Plan selected" : "Choose professional" }}</button>
+    <if condition="plan === 'professional'"><p class="success">✓ Thanks for upgrading.</p></if>
   </main>
 </template>
 <script>
@@ -12,4 +12,6 @@ export default {
   methods: { choose() { this.plan = "professional"; } }
 }
 </script>
-<style scoped>.portal { min-height: 20rem; padding: 3rem; background: #f5f7fb; }</style>
+<style scoped>
+* { box-sizing: border-box; } .portal { min-height: 100vh; padding: clamp(2rem, 8vw, 7rem) max(1.25rem, calc((100% - 48rem) / 2)); background: #11101f; color: #f4f1ff; font: 1rem system-ui, sans-serif; } .eyebrow { color: #d9a7ff; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; } h1 { margin: .5rem 0 2rem; font-size: clamp(2.4rem, 8vw, 4.5rem); letter-spacing: -.06em; } .plan { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding: 1.2rem; border: 1px solid #3a3154; border-radius: 1rem; background: #211b35; } .plan-icon { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: .8rem; background: #9f68dc; font-size: 1.4rem; } .plan p { margin: .2rem 0 0; color: #b8abc9; } button { border: 0; border-radius: .7rem; padding: .8rem 1rem; background: #d9a7ff; color: #20152e; font-weight: 800; cursor: pointer; } button:hover { background: #edcfff; } .success { color: #79e7bf; }
+</style>

@@ -1,9 +1,9 @@
 <template>
   <main class="dashboard">
-    <h1>{{ heading }}</h1>
-    <p>Signed in as {{ user.name }}</p>
+    <p class="eyebrow">Flask + Teloce</p><h1>{{ heading }}</h1>
+    <div class="profile"><div class="avatar">{{ user.name.slice(0, 1) }}</div><div><strong>{{ user.name }}</strong><p>{{ user.active ? "Active workspace" : "Signed out" }}</p></div><span class="dot"></span></div>
     <button @click="toggle">{{ user.active ? "Sign out" : "Sign in" }}</button>
-    <if condition="user.active"><p class="status">Your workspace is ready.</p></if>
+    <if condition="user.active"><p class="status">✓ Your workspace is ready.</p></if>
   </main>
 </template>
 <script>
@@ -12,4 +12,9 @@ export default {
   methods: { toggle() { this.user.active = !this.user.active; } }
 }
 </script>
-<style scoped>.dashboard { padding: 2rem; } .status { color: green; }</style>
+<style scoped>
+* { box-sizing: border-box; } body { margin: 0; min-height: 100vh; background: #101827; color: #edf3ff; font: 16px/1.5 system-ui, sans-serif; }
+.dashboard { min-height: 100vh; padding: clamp(2rem, 9vw, 7rem) max(1.25rem, calc((100% - 44rem) / 2)); background: #101827; color: #edf3ff; font: 16px/1.5 system-ui, sans-serif; } .eyebrow { color: #8ea8ff; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; } h1 { margin: .5rem 0 2rem; font-size: clamp(2.4rem, 8vw, 4.5rem); letter-spacing: -.06em; }
+.profile { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #2b3953; border-radius: 1rem; background: #18243a; } .profile p { margin: .15rem 0 0; color: #9eabc1; } .avatar { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: 50%; background: #6e7dff; font-weight: 800; } .dot { width: .65rem; height: .65rem; margin-left: auto; border-radius: 50%; background: #3dd598; box-shadow: 0 0 0 .25rem #3dd59822; }
+button { border: 0; border-radius: .7rem; padding: .75rem 1rem; background: #7182ff; color: #fff; font-weight: 700; cursor: pointer; } button:hover { background: #8d9bff; } button:focus-visible { outline: 3px solid #c3cbff; outline-offset: 2px; } .status { margin-top: 1.5rem; color: #6be3b5; } @media (max-width: 30rem) { .profile { align-items: flex-start; } }
+</style>
