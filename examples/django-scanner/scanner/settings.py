@@ -3,7 +3,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "development-only-change-me"
 DEBUG = True
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+# Include Django's test client host so the example is testable without
+# weakening production host validation for real deployments.
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
 ROOT_URLCONF = "scanner.urls"
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware", "django.middleware.common.CommonMiddleware"]
 INSTALLED_APPS = ["django.contrib.staticfiles"]

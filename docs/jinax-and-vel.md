@@ -47,7 +47,7 @@ if __name__ == "__main__":
 </html>
 ```
 
-Your Flaxon deployment must expose the generated `dist/` files at `/assets/`. The Flaxon example in `examples/flaxon` includes a safe asset handler. In development, build first with `python build.py`, then run `flaxon run app:app --reload`.
+Your Flaxon deployment must expose the generated `dist/` files at `/assets/`. The Flaxon example in `examples/flaxon` includes a safe asset handler. In development, build first with `python build.py`, then run `python -m flaxon run app:app --reload`.
 
 ## Passing server data
 
@@ -58,4 +58,3 @@ Pass small, non-sensitive initial values through Jinax:
 ```
 
 For user-controlled values, serialize with your framework's JSON helper rather than interpolating raw strings. Fetch private or changing data from an authenticated Python endpoint and enforce authorization on that endpoint.
-

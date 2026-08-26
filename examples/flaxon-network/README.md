@@ -5,7 +5,7 @@ This example follows Flaxon's async application style: a `Flaxon` app, Jinax-ren
 ```bash
 python -m pip install -r requirements.txt
 python build.py
-flaxon run app:app --reload
+python -m flaxon run app:app --reload
 ```
 
-Flaxon versions may expose different runner flags; use `flaxon run --help` for the installed release.
+Flaxon versions may expose different runner flags; use `python -m flaxon run --help` for the installed release.

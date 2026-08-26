@@ -5,7 +5,7 @@ This example is a real asynchronous Flaxon host. Jinax renders the HTML shell, F
 ```bash
 python -m pip install -r requirements.txt
 python build.py
-flaxon run app:app --reload
+python -m flaxon run app:app --reload
 ```
 
-Open <http://127.0.0.1:8000>. The app also exposes `/api/health`. Run `flaxon run --help` if your installed Flaxon release uses a different runner flag.
+Open <http://127.0.0.1:8000>. The app also exposes `/api/health`. Run `python -m flaxon run --help` if your installed Flaxon release uses different runner flags.
