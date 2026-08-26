@@ -110,10 +110,12 @@ Create `templates/index.html`:
   </head>
   <body>
     <div id="app">
-      <h1>{{ title }}</h1>
+      {% raw %}
+      <h1>Runtime notebook</h1>
       <button @click="add">Add a note</button>
       <p v-if="notes.length === 0">No notes yet.</p>
       <button v-for="note in notes" :key="note.id" @click="select(note.id)">{{ note.title }}</button>
+      {% endraw %}
     </div>
 
     <script src="/assets/teloce-standalone.js"></script>
@@ -134,7 +136,7 @@ Create `templates/index.html`:
 </html>
 ```
 
-The `{{ title }}` at the top is Jinax server interpolation. The `{{ note.title }}` inside the mounted application is Teloce interpolation. Keep that distinction in mind: Jinax runs in Python before the response reaches the browser; Teloce runs in the browser after the runtime mounts.
+The `{{ title }}` in the document head is Jinax server interpolation. The `{{ note.title }}` inside the mounted application is Teloce interpolation. Keep that distinction in mind: Jinax runs in Python before the response reaches the browser; Teloce runs in the browser after the runtime mounts. The `{% raw %}` block prevents Jinax from trying to evaluate Teloce expressions on the server.
 
 ## Step 5: run the complete notebook example
 
