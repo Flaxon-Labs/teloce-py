@@ -135,6 +135,9 @@ The dashboard is a local build and diagnostics inspector. It does not yet
 provide live runtime component state inspection or production telemetry. Keep
 it bound to localhost and do not expose it publicly without authentication.
 
+For the complete dashboard, browser, API, cache, and deployment workflow, see
+[Debugging](debugging.md) and [Troubleshooting](troubleshooting.md).
+
 ## `teloce benchmark`
 
 ```bash

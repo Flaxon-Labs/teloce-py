@@ -33,6 +33,8 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [API](api.md) — Python compiler APIs
 - [Errors](errors.md) — diagnostics and debugging
 - [Support](support.md) — issue-reporting information
+- [Debugging](debugging.md) — compiler, browser, API, and deployment workflow
+- [Troubleshooting](troubleshooting.md) — fixes for common `.vel`, PWA, Python, and Vercel issues
 ## Lessons
 
 Start with the guided [Teloce-Py and Flaxon lessons](lessons/README.md). They cover `.vel` syntax, reusable components, Python framework integration, production habits, and building an original OS-style web application.

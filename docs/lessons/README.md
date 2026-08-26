@@ -15,6 +15,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 9. [Flask: a server-rendered app with imported components](09-flask.md)
 10. [What the Flaxon OS production build proves](10-production-case-study.md)
 11. [PWA and MSIX packaging](11-pwa-and-msix.md)
+12. [Build a small search engine with `.vel`](12-search-engine-showcase.md)
 
 ## What you can build
 
@@ -27,6 +28,8 @@ write .vel -> run the compiler -> serve the generated JavaScript -> use Python n
 ```
 
 You do not need to replace Flask, FastAPI, Django, or another Python framework. Teloce-Py generates browser assets that any framework can serve.
+
+When an application behaves unexpectedly, use the [debugging guide](../debugging.md) and [troubleshooting guide](../troubleshooting.md). They include the real problems found while building the Flaxon OS and PySeek applications.
 
 ## Original and compatible APIs
 
