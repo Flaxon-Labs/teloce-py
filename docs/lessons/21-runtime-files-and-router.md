@@ -219,6 +219,30 @@ export default {
 
 For Three.js, also dispose geometries, materials, and the renderer. A route change that appears visually correct can still leak resources if cleanup is missing.
 
+## Keep the router fast when a page uses a large library
+
+The router imports its route components before mounting the active page. If a route component has a top-level import for a large library such as Three.js, that download can delay the entire application. Load the library inside `mounted` instead:
+
+```html
+<script>
+export default {
+  data() { return { loading: true, error: false, destroyed: false } },
+  mounted() {
+    import('https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js').then(
+      module => { if (!this.destroyed) this.startScene(module) },
+      error => { this.loading = false; this.error = true; console.error(error) }
+    )
+  },
+  beforeUnmount() { this.destroyed = true; this.renderer?.dispose() },
+  methods: {
+    startScene(THREE) { this.renderer = new THREE.WebGLRenderer({ antialias: true }); this.loading = false }
+  }
+}
+</script>
+```
+
+Render a `loading` or `error` fallback immediately. This pattern was required by the Teloce Motion showcase: its original top-level CDN import made Vercel appear to show only a background color until the remote module finished loading. Test both a fast connection and a throttled/offline connection.
+
 ## Debugging runtime and router loading
 
 Check these URLs directly:

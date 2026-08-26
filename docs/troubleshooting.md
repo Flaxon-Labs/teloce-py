@@ -176,6 +176,46 @@ export default {
 
 If the page shows the fallback, inspect the console for `Error creating WebGL context`, test another browser, update graphics drivers, and check whether hardware acceleration is disabled. A CSS fallback is preferable to an empty panel.
 
+### Vercel shows only the background color while Three.js loads
+
+Do not use a large CDN import at the top level of the page's router entry module:
+
+```js
+// This blocks the router and every page until the CDN responds.
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three/build/three.module.js'
+```
+
+That pattern can make a serverless deployment appear blank or take a long time to load. The Teloce Motion showcase had this exact problem. Load Three.js after the component has mounted so the text, navigation, and fallback render immediately:
+
+```html
+<script>
+export default {
+  data() { return { loading: true, error: false, destroyed: false } },
+  mounted() {
+    import('https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js').then(
+      module => { if (!this.destroyed) this.startScene(module) },
+      error => { this.loading = false; this.error = true; console.error(error) }
+    )
+  },
+  beforeUnmount() { this.destroyed = true; this.renderer?.dispose() },
+  methods: {
+    startScene(THREE) {
+      try {
+        // Create the scene and renderer here, after the host element exists.
+        this.scene = new THREE.Scene()
+        this.renderer = new THREE.WebGLRenderer({ antialias: true })
+        this.loading = false
+      } catch (error) {
+        this.loading = false; this.error = true; console.error(error)
+      }
+    }
+  }
+}
+</script>
+```
+
+Render a loading/error panel with `v-if="loading || error"`. Keep the import version pinned, or bundle Three.js during the build for a fully self-contained release. After deploying, hard-refresh and verify the generated module contains a dynamic `import(` rather than a top-level `import * as THREE`.
+
 ## Router navigation problems
 
 When one route works and another is blank, inspect the hash/history URL and the generated router:

@@ -130,3 +130,47 @@ routes = [
 Keep `app.py` at the repository root, declare `Flask` and `teloce-py` in `requirements.txt`, and run `python build.py` as the Vercel build step. The showcase uses the same pattern. See the project's [README](https://github.com/aldanedev-create/teloce-showcase/blob/main/README.md) for local and Vercel commands.
 
 For production Three.js work, pin the CDN version or bundle it, add a WebGL fallback, pause when the document is hidden, respect reduced-motion preferences, and dispose every resource during unmount.
+
+## Performance lesson from the live deployment
+
+The first version imported Three.js at the top of `HomePage.vel`. Because the router imported `HomePage` before mounting any route, the whole application waited for the remote CDN module. On a slow connection or a cold serverless request, users saw only the dark background.
+
+Use a lazy import inside `mounted` instead:
+
+```html
+<script>
+export default {
+  data() { return { sceneLoading: true, sceneError: false, destroyed: false } },
+  mounted() {
+    import('https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js').then(
+      module => { if (!this.destroyed) this.startScene(module) },
+      error => { this.sceneLoading = false; this.sceneError = true; console.error(error) }
+    )
+  },
+  beforeUnmount() { this.destroyed = true; this.renderer?.dispose() },
+  methods: {
+    startScene(THREE) {
+      try {
+        const host = document.querySelector('#scene')
+        this.renderer = new THREE.WebGLRenderer({ antialias: true })
+        this.renderer.setSize(host.clientWidth, host.clientHeight)
+        host.appendChild(this.renderer.domElement)
+        this.sceneLoading = false
+      } catch (error) {
+        this.sceneLoading = false; this.sceneError = true; console.error(error)
+      }
+    }
+  }
+}
+</script>
+
+<template>
+  <section id="scene">
+    <div v-if="sceneLoading || sceneError">
+      {{ sceneError ? 'WebGL is unavailable.' : 'Loading interactive motion...' }}
+    </div>
+  </section>
+</template>
+```
+
+This gives users immediate content, lets the router work independently, and turns CDN/WebGL failure into a usable state instead of a blank panel. For larger production apps, bundle and self-host Three.js when practical, pin external versions, and test with a throttled network and WebGL disabled.
