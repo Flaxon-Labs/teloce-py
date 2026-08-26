@@ -15,6 +15,12 @@ DEFAULT_MODEL = {
     "components": [],
     "routes": [],
     "theme": {"primary": "#6c63ff", "background": "#0b1020"},
+    "elements": [
+        {"id": "hero", "type": "section", "label": "Hero section", "text": "Build with Teloce and Flaxon", "children": ["hero-title", "hero-copy", "hero-button"]},
+        {"id": "hero-title", "parentId": "hero", "type": "heading", "label": "Heading", "text": "My Flaxon App"},
+        {"id": "hero-copy", "parentId": "hero", "type": "text", "label": "Paragraph", "text": "A real editable application generated from a visual project model."},
+        {"id": "hero-button", "parentId": "hero", "type": "button", "label": "Button", "text": "Get started"},
+    ],
 }
 
 
@@ -44,12 +50,19 @@ def get_project(project_id: str) -> dict:
     path = model_path(project_id)
     if not path.is_file():
         raise FileNotFoundError(project_id)
-    return json.loads(path.read_text(encoding="utf-8"))
+    model = json.loads(path.read_text(encoding="utf-8"))
+    model.setdefault("elements", [])
+    model.setdefault("theme", {"primary": "#6c63ff", "background": "#0b1020"})
+    return model
 
 
 def save_project(model: dict, project_id: str | None = None) -> dict:
     project_id = safe_project_id(project_id or model.get("id") or uuid4().hex[:12])
     model = {**DEFAULT_MODEL, **model, "id": project_id, "updatedAt": datetime.now(timezone.utc).isoformat()}
+    if not isinstance(model.get("elements"), list):
+        raise ValueError("elements must be a list")
+    if len(json.dumps(model)) > 2_000_000:
+        raise ValueError("Project model is too large")
     target = _project_dir(project_id)
     target.mkdir(parents=True, exist_ok=True)
     model_path(project_id).write_text(json.dumps(model, indent=2) + "\n", encoding="utf-8")

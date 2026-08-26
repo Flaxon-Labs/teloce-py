@@ -11,8 +11,11 @@ def register_projects(app):
 
     @app.post("/api/projects")
     async def create_project(request: Request):
-        data = await request.json()
-        return {"ok": True, "project": save_project(data or {})}
+        try:
+            data = await request.json()
+            return {"ok": True, "project": save_project(data or {})}
+        except (ValueError, TypeError) as error:
+            return {"ok": False, "error": str(error)}
 
     @app.get("/api/projects/<project_id>")
     async def project(request: Request, project_id: str):
@@ -23,5 +26,8 @@ def register_projects(app):
 
     @app.put("/api/projects/<project_id>")
     async def update_project(request: Request, project_id: str):
-        data = await request.json()
-        return {"ok": True, "project": save_project(data or {}, project_id)}
+        try:
+            data = await request.json()
+            return {"ok": True, "project": save_project(data or {}, project_id)}
+        except (ValueError, TypeError) as error:
+            return {"ok": False, "error": str(error)}
