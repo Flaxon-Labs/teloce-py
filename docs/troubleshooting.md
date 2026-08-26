@@ -13,6 +13,51 @@ Verify the mount target and module path:
 
 Check every generated JavaScript and CSS request in DevTools Network. A wrong output directory or stale service worker can make a valid Python server look blank.
 
+### The `.vel` file is not being found
+
+Put source components under the directory the compiler scans, normally `static/js/`. Keep server templates in `templates/` and generated files in `dist/` or `public/`:
+
+```text
+static/js/App.vel                 # source: edit this
+static/js/components/Header.vel   # source: import this relatively
+templates/index.html              # server HTML shell
+dist/static/js/App.js             # generated: do not edit this
+```
+
+Run:
+
+```bash
+teloce doctor --verbose
+teloce lint --strict
+teloce build --out-dir dist --source-map
+```
+
+If the component is absent from the build report, it is in the wrong source directory, excluded by configuration, or has an extension/case mismatch. If it appears in the report but the browser receives `404`, your static-file route points at a different output directory.
+
+### The HTML mount is wrong
+
+The HTML shell must contain the mount element and load the generated module:
+
+```html
+<main id="app"></main>
+<script type="module">
+  import { mount } from '/static/js/App.js'
+  mount(document.querySelector('#app'))
+</script>
+```
+
+For a generated router:
+
+```html
+<div id="app"></div>
+<script type="module">
+  import router from '/static/js/router.js'
+  router.mount(document.querySelector('#app'))
+</script>
+```
+
+An empty mount element with no console error often means the module was never requested, the router has no matching route, or an old cached module is being used.
+
 ## Text disappears while typing
 
 Do not let a parent native `@input` listener update reactive state on a custom component. The child can be re-rendered and erase the browser value. Use:
@@ -49,6 +94,114 @@ Resolve imports relative to the importing file and keep filename casing consiste
 
 Run `teloce build --out-dir dist`, inspect the generated CSS path, and verify that rewrites do not change `/assets/...` into an unexpected backend route.
 
+### A component import works locally but fails in production
+
+Use a relative import from the importing file and preserve filename casing:
+
+```html
+<!-- static/js/pages/Home.vel -->
+<script>import Card from '../components/Card.vel'</script>
+```
+
+`Card.vel`, `card.vel`, and `CARD.vel` may be treated as different files on Linux even if they appear equivalent on Windows. Run a clean production build in an environment matching deployment. Never rely on a generated file left over from an earlier build.
+
+### The compiler fails around HTML or code examples
+
+Keep HTML void elements valid for the SFC parser:
+
+```html
+<br />
+<input type="search" />
+<img src="/static/logo.svg" alt="Logo" />
+```
+
+Avoid unescaped backticks inside template text when the generated component uses a JavaScript template literal. Write `.vel` as text or use an HTML entity instead:
+
+```html
+<p>Use a ".vel" file.</p>
+```
+
+Put JavaScript template literals inside the `<script>` section, where they belong. After changing a parser-sensitive template, run `node --check` against the generated module.
+
+### CSS exists but does not appear
+
+Check that the component style is inside `<style>` or `<style scoped>` and that the generated CSS is loaded. Scoped CSS selectors receive a component scope attribute; a selector copied into a separate global stylesheet may not match as expected. Also check for an overlay, `z-index`, `display: none`, zero height, or a parent with `overflow: hidden`.
+
+## Three.js, canvas, and animation problems
+
+The Teloce Motion showcase exposed several useful checks:
+
+1. Confirm the CDN module returns `200` and JavaScript content.
+2. Confirm the `.vel` file contains the import and the generated module preserves it.
+3. Create the renderer only in `mounted`, after the canvas host exists.
+4. Give the scene container a non-zero width and height.
+5. Use `requestAnimationFrame` and cancel it in `beforeUnmount`.
+6. Dispose geometries, materials, and the renderer when leaving the route.
+7. Catch WebGL initialization errors and show a user-visible fallback.
+
+```html
+<script>
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js'
+
+export default {
+  data() { return { frame: 0, webglError: false } },
+  mounted() {
+    const host = document.querySelector('#scene')
+    try {
+      this.scene = new THREE.Scene()
+      this.camera = new THREE.PerspectiveCamera(45, host.clientWidth / host.clientHeight, .1, 100)
+      this.camera.position.z = 3
+      this.renderer = new THREE.WebGLRenderer({ antialias: true })
+      this.renderer.setSize(host.clientWidth, host.clientHeight)
+      host.appendChild(this.renderer.domElement)
+      this.animateFrame()
+    } catch (error) {
+      this.webglError = true
+      console.error('WebGL initialization failed', error)
+    }
+  },
+  beforeUnmount() {
+    cancelAnimationFrame(this.frame)
+    this.renderer?.dispose()
+  },
+  methods: {
+    animateFrame() {
+      this.frame = requestAnimationFrame(this.animateFrame.bind(this))
+      this.renderer.render(this.scene, this.camera)
+    }
+  }
+}
+</script>
+```
+
+If the page shows the fallback, inspect the console for `Error creating WebGL context`, test another browser, update graphics drivers, and check whether hardware acceleration is disabled. A CSS fallback is preferable to an empty panel.
+
+## Router navigation problems
+
+When one route works and another is blank, inspect the hash/history URL and the generated router:
+
+```js
+console.log(location.hash)
+console.log(window.__teloceRouter?.state)
+```
+
+For hash mode, links must use `href="#/tutorial"`. For history mode, the server must return the HTML shell for direct requests such as `/tutorial`; otherwise refresh produces a server `404`. When changing routes, verify that the previous component's `beforeUnmount` runs and that animation frames, timers, event listeners, and signal subscriptions are released.
+
+## Signals and reactivity problems
+
+Use component `data()` for local state and explicit signals for state shared by browser modules. If a signal effect runs after a page is gone, keep the cleanup function and call it from `beforeUnmount`:
+
+```js
+const stop = status.subscribe(value => {
+  element.textContent = value
+})
+
+// Later, when the component is destroyed:
+stop()
+```
+
+Do not store secrets, permissions, or trusted authorization decisions in client signals. The Python server remains authoritative.
+
 ## Vercel build fails
 
 Read the first error from `vercel logs`. Common fixes include:
@@ -72,6 +225,19 @@ The database must be configured, the schema must exist, and a URL must be seeded
 ## PWA shows an old UI
 
 Increment the service-worker cache name after generated runtime changes, redeploy, and hard-refresh. In DevTools Application, unregister the worker and delete Cache Storage only while diagnosing local stale-cache behavior.
+
+## The fix works locally but not on Vercel
+
+Compare the three environments instead of assuming the source is identical:
+
+```bash
+python build.py
+curl -I http://127.0.0.1:5000/static/js/App.js
+vercel logs your-deployment-url
+curl -I https://your-app.vercel.app/static/js/App.js
+```
+
+Check Python version, dependency installation, environment variables, build output, static rewrites, case-sensitive paths, service-worker caches, and external CDN availability. The Vercel build must run the same Teloce build command as local development.
 
 ## Bug-report checklist
 
