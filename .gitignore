@@ -172,3 +172,7 @@ htmlcov/
 
 # Benchmark results
 *.bench
+
+# Independent applications maintained beside the compiler repository
+/teloce-studio/
+/flaxon-os/

@@ -1,1 +1,0 @@
-<template><aside class="properties-panel" aria-label="Properties panel"><slot></slot></aside></template>

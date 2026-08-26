@@ -1,1 +1,0 @@
-<template><header class="project-toolbar" aria-label="Project toolbar"><slot></slot></header></template>

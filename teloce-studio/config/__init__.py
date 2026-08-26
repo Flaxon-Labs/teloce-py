@@ -1,1 +1,0 @@
-"""Teloce Studio configuration package."""

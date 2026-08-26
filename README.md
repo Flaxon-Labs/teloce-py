@@ -22,7 +22,7 @@ Teloce gives that layer a small, inspectable component model:
 ## Quick start
 
 ```bash
-git clone https://github.com/aldanedev-create/telonce-python.git
+git clone https://github.com/aldanedev-create/teloce-py.git
 cd teloce-python
 python -m venv .venv
 # Windows: .venv\\Scripts\\activate
@@ -72,6 +72,62 @@ The generated `App.js` is a browser module. Put a mount point in your server tem
 ```
 
 The complete framework examples are in [`examples/`](examples/), and the walkthroughs are in [`docs/`](docs/).
+
+### Copy-paste Flask app
+
+From a new project directory, install Teloce and Flask:
+
+```bash
+python -m pip install teloce-py Flask
+mkdir -p static/js templates
+```
+
+Create `static/js/App.vel`:
+
+```html
+<template>
+  <main class="app">
+    <h1>{{ message }}</h1>
+    <button @click="message = 'Updated in the browser'">Update</button>
+  </main>
+</template>
+
+<script>
+export default { data() { return { message: "Hello from .vel" }; } };
+</script>
+```
+
+Create `app.py`:
+
+```python
+from flask import Flask, render_template
+
+app = Flask(__name__)
+
+@app.get("/")
+def home():
+    return render_template("index.html")
+
+if __name__ == "__main__":
+    app.run(debug=True)
+```
+
+Create `templates/index.html`, then compile and run:
+
+```html
+<!doctype html>
+<html><body>
+  <div id="app"></div>
+  <script type="module" src="{{ url_for('static', filename='js/App.js') }}"></script>
+</body></html>
+```
+
+```bash
+teloce compile static/js/App.vel -o static/js/App.js
+python app.py
+```
+
+Open `http://127.0.0.1:5000`. The Flask server owns the page route; Teloce owns the browser component.
 
 ## What `.vel` supports
 
