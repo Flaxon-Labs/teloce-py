@@ -7,6 +7,169 @@ Teloce has two related reactivity layers:
 
 Use component state for values owned by one `.vel` component. Use signals when independent components, a browser service, or an effect need to observe the same value.
 
+## First: what does “the runtime” mean?
+
+There are two runtime paths, and choosing the right one avoids confusion.
+
+### 1. Compiled component runtime
+
+When you compile a `.vel` file, Teloce-Py normally emits a self-contained JavaScript module. The generated module includes the behavior it needs for mounting, events, interpolation, conditions, loops, bindings, and lifecycle hooks. For this normal workflow, you do not copy a runtime file or install JavaScript packages.
+
+```html
+<div id="app"></div>
+<script type="module">
+  import { mount } from '/static/js/App.js'
+  mount(document.querySelector('#app'))
+</script>
+```
+
+This is the recommended starting point for a beginner.
+
+### 2. Explicit browser runtime assets
+
+The package also includes reusable browser files in `teloce.runtime`. Use these when you want a standalone server-rendered page, shared signals, or a browser helper used by multiple components. Python only copies/serves these files; they execute in the browser.
+
+The package contains:
+
+```text
+teloce/runtime/
+├── standalone.js   # global teloce.createApp() runtime for HTML/Jinja
+├── signals.js      # createSignal, createComputed, createEffect
+├── scheduler.js    # dependency of signals.js
+├── runtime.js      # composed ES-module runtime
+└── other runtime modules
+```
+
+Do not import a Python file into browser JavaScript. The browser needs a URL to a `.js` file served by Flask, FastAPI, Django, Flaxon, or another web server.
+
+## Beginner project: expose the runtime with Flask
+
+Create this project:
+
+```text
+runtime-demo/
+├── app.py
+├── templates/index.html
+└── static/teloce/
+```
+
+Install the packages:
+
+```bash
+python -m pip install Flask teloce-py
+```
+
+Create `app.py`. This copies the two files required by the signals module into your public static directory every time the app starts:
+
+```python
+from importlib.resources import files
+from pathlib import Path
+import shutil
+
+from flask import Flask, render_template
+
+ROOT = Path(__file__).parent
+RUNTIME_OUT = ROOT / 'static' / 'teloce'
+RUNTIME_OUT.mkdir(parents=True, exist_ok=True)
+
+runtime_package = files('teloce.runtime')
+for filename in ('signals.js', 'scheduler.js'):
+    source = runtime_package.joinpath(filename)
+    destination = RUNTIME_OUT / filename
+    with source.open('rb') as input_file, destination.open('wb') as output_file:
+        shutil.copyfileobj(input_file, output_file)
+
+app = Flask(__name__)
+
+@app.get('/')
+def home():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
+```
+
+Now the browser can request:
+
+```text
+http://127.0.0.1:5000/static/teloce/signals.js
+http://127.0.0.1:5000/static/teloce/scheduler.js
+```
+
+Create `templates/index.html`:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Runtime demo</title>
+  </head>
+  <body>
+    <h1 id="status">Offline</h1>
+    <button id="connect">Connect</button>
+    <button id="disconnect">Disconnect</button>
+
+    <script type="module">
+      import { createSignal, createComputed, createEffect } from '/static/teloce/signals.js'
+
+      const online = createSignal(false)
+      const status = createComputed(() => online() ? 'Online' : 'Offline')
+      const statusElement = document.querySelector('#status')
+
+      const stop = createEffect(() => {
+        statusElement.textContent = status()
+      })
+
+      document.querySelector('#connect').addEventListener('click', () => online.set(true))
+      document.querySelector('#disconnect').addEventListener('click', () => online.set(false))
+
+      // In a real component, call stop() during beforeUnmount.
+      window.addEventListener('pagehide', stop, { once: true })
+    </script>
+  </body>
+</html>
+```
+
+Run the app:
+
+```bash
+python app.py
+```
+
+Open `http://127.0.0.1:5000`. Clicking Connect changes the signal, recalculates `status`, and runs the effect that updates the heading. No page reload is needed.
+
+## Using the standalone runtime with Jinax or Jinja
+
+The standalone runtime is for HTML that is already rendered by Python. It is different from the ES-module signals file. Copy it with:
+
+```python
+from importlib.resources import files
+import shutil
+
+source = files('teloce.runtime').joinpath('standalone.js')
+with source.open('rb') as input_file, (RUNTIME_OUT / 'standalone.js').open('wb') as output_file:
+    shutil.copyfileobj(input_file, output_file)
+```
+
+Then use it in a server-rendered template:
+
+```html
+<div id="app">
+  <h1>{{ title }}</h1>
+  <button @click="count++">Clicked {{ count }} times</button>
+</div>
+<script src="/static/teloce/standalone.js"></script>
+<script>
+  teloce.createApp('#app', { title: 'Hello from Python', count: 0 })
+</script>
+```
+
+The server renders `{{ title }}` first when using Jinja/Jinax. Teloce then owns browser-side events and state. Escape untrusted server values and never use `v-html` with untrusted content.
+
+Use the standalone runtime for small server-rendered pages or gradual migration. Use compiled `.vel` modules for larger applications, local imports, scoped CSS, source maps, and component-level lifecycle control.
+
 ## Component reactivity: the easiest path
 
 Create `static/js/App.vel`:
