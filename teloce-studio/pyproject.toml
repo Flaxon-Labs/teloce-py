@@ -7,7 +7,10 @@ name = "teloce-studio"
 version = "0.1.0.dev0"
 description = "Visual project editor for Teloce .vel and Flaxon applications"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "flaxon>=0.1.0",
+  "teloce-py>=0.2.0b1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

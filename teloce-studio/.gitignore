@@ -8,3 +8,5 @@ generated-preview/
 .env
 *.db
 *.log
+workspace/
+*.png

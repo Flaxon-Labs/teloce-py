@@ -1,0 +1,1 @@
+{"name":"Teloce Studio","short_name":"Studio","start_url":"/","display":"standalone","background_color":"#080c18","theme_color":"#0b1020","description":"Visual editor for Teloce .vel and Flaxon applications","icons":[{"src":"/assets/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}],"categories":["developer","productivity"]}
