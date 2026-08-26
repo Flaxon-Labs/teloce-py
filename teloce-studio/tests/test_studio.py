@@ -25,3 +25,12 @@ def test_project_id_rejects_path_traversal(tmp_path, monkeypatch):
         assert "Invalid project id" in str(error)
     else:
         raise AssertionError("path traversal id was accepted")
+
+
+def test_generation_includes_visual_api_bindings(tmp_path, monkeypatch):
+    monkeypatch.setattr(project_service, "WORKSPACE_ROOT", tmp_path)
+    model = project_service.save_project({"name": "API Builder", "bindings": [{"name": "Tasks", "method": "GET", "path": "/api/tasks", "response": {"ok": True, "data": []}}]}, "api-demo")
+    generate_project(model)
+    source = (tmp_path / "api-demo" / "app.py").read_text(encoding="utf-8")
+    assert "@app.get('/api/tasks')" in source or '@app.get("/api/tasks")' in source
+    assert "generated_api_0" in source

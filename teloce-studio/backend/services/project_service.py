@@ -14,6 +14,7 @@ DEFAULT_MODEL = {
     "pages": [{"id": "home", "name": "Home", "path": "/", "file": "static/js/pages/Home.vel"}],
     "components": [],
     "routes": [],
+    "bindings": [],
     "theme": {"primary": "#6c63ff", "background": "#0b1020"},
     "elements": [
         {"id": "hero", "type": "section", "label": "Hero section", "text": "Build with Teloce and Flaxon", "children": ["hero-title", "hero-copy", "hero-button"]},
@@ -53,6 +54,7 @@ def get_project(project_id: str) -> dict:
     model = json.loads(path.read_text(encoding="utf-8"))
     model.setdefault("elements", [])
     model.setdefault("theme", {"primary": "#6c63ff", "background": "#0b1020"})
+    model.setdefault("bindings", [])
     return model
 
 
@@ -61,6 +63,8 @@ def save_project(model: dict, project_id: str | None = None) -> dict:
     model = {**DEFAULT_MODEL, **model, "id": project_id, "updatedAt": datetime.now(timezone.utc).isoformat()}
     if not isinstance(model.get("elements"), list):
         raise ValueError("elements must be a list")
+    if not isinstance(model.get("bindings", []), list):
+        raise ValueError("bindings must be a list")
     if len(json.dumps(model)) > 2_000_000:
         raise ValueError("Project model is too large")
     target = _project_dir(project_id)

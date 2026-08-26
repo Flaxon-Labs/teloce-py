@@ -10,6 +10,7 @@ from flaxon.http.response import Response
 from flaxon.jinax import Jinax
 
 from backend.routes.assets import register_assets
+from backend.routes.bindings import register_bindings
 from backend.routes.generation import register_generation
 from backend.routes.health import register_health
 from backend.routes.preview import register_preview
@@ -55,6 +56,7 @@ register_projects(app)
 register_generation(app)
 register_preview(app)
 register_assets(app)
+register_bindings(app)
 _register_static_assets()
 
 

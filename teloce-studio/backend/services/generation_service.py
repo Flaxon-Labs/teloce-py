@@ -24,6 +24,17 @@ def _render_elements(model: dict) -> str:
     return "\n".join(render(item) for item in roots)
 
 
+def _render_bindings(model: dict) -> str:
+    lines = []
+    for index, binding in enumerate(model.get("bindings", [])):
+        method = str(binding.get("method", "GET")).upper()
+        path = str(binding.get("path", "/api/data"))
+        function_name = "generated_api_" + str(index)
+        body = repr(binding.get("response", {"ok": True, "data": []}))
+        lines.extend([f'@app.{method.lower()}({path!r})', f'async def {function_name}():', f'    return {body}', ""])
+    return "\n".join(lines)
+
+
 def generate_project(model: dict) -> dict:
     root = _project_dir(model["id"])
     page = (model.get("pages") or [{"file": "static/js/pages/Home.vel", "name": "Home"}])[0]
@@ -36,7 +47,8 @@ def generate_project(model: dict) -> dict:
     (root / "static" / "js" / "App.vel").write_text("<script>\nimport Home from './pages/Home.vel'\n</script>\n<template><Home /></template>\n", encoding="utf-8")
     (root / "static" / "css").mkdir(parents=True, exist_ok=True)
     (root / "static" / "css" / "app.css").write_text(":root{font-family:system-ui,sans-serif;color:#eef2ff;background:#0b1020}body{margin:0}.page-shell{padding:4rem;max-width:70rem;margin:auto}\n", encoding="utf-8")
-    (root / "app.py").write_text('''from flaxon import Flaxon\n\napp = Flaxon("generated-flaxon-app")\n\n@app.get("/api/health")\nasync def health():\n    return {"ok": True}\n''', encoding="utf-8")
+    binding_routes = _render_bindings(model)
+    (root / "app.py").write_text(f'''from flaxon import Flaxon\n\napp = Flaxon("generated-flaxon-app")\n\n@app.get("/api/health")\nasync def health():\n    return {{"ok": True}}\n\n{binding_routes}\n''', encoding="utf-8")
     (root / "templates").mkdir(exist_ok=True)
     (root / "templates" / "index.html").write_text("<!doctype html><html><body><main id=\"app\"></main><script type=\"module\" src=\"/assets/static/js/App.js\"></script></body></html>\n", encoding="utf-8")
     (root / "requirements.txt").write_text("flaxon\nteloce-py\n", encoding="utf-8")
