@@ -17,6 +17,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 11. [PWA and MSIX packaging](11-pwa-and-msix.md)
 12. [Build a small search engine with `.vel`](12-search-engine-showcase.md)
 13. [CSS animation and Three.js in `.vel`](13-animation-and-threejs.md)
+14. [Build a demo UI framework with `.vel`](14-demo-framework.md)
 
 ## What you can build
 

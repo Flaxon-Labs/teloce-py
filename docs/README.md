@@ -25,6 +25,7 @@ Then open the URL printed by the server. You do not need to manually run a separ
 - [VS Code](vscode.md)
 - [Real-world examples](real-world-examples.md)
 - [Animation and Three.js lesson](lessons/13-animation-and-threejs.md)
+- [Demo UI framework lesson](lessons/14-demo-framework.md)
 
 ## Reference pages
 
