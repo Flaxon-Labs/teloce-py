@@ -19,6 +19,8 @@ build/
 !src/teloce/build/**
 !tests/build/
 !tests/build/**
+src/teloce/build/__pycache__/
+tests/build/__pycache__/
 develop-eggs/
 dist/
 downloads/
