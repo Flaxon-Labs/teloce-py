@@ -65,4 +65,4 @@ templates/index.html:
     <div id="app"></div>
     <script type="module">import { mount } from "{{ url_for('static', path='js/App.js') }}"; mount("#app");</script>
 
-Run pip install fastapi uvicorn jinja2 teloce-py, then teloce check ., teloce build . --out-dir dist, and uvicorn app:app --reload. In production validate bodies with Pydantic, authenticate CMS writes, configure CORS deliberately, and deploy behind a managed ASGI server.
+Run `pip install fastapi uvicorn jinja2 teloce-py`, then `teloce doctor --verbose`, `teloce lint --strict`, `teloce build --out-dir dist`, and `uvicorn app:app --reload`. In production validate bodies with Pydantic, authenticate CMS writes, configure CORS deliberately, and deploy behind a managed ASGI server.

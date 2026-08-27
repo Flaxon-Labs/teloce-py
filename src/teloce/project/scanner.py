@@ -32,7 +32,7 @@ class ProjectScanner:
             '.vscode',
         }
     
-    def scan(self, root_dir: str | Path) -> List[Path]:
+    def scan(self, root_dir: str | Path, exclude_paths: Optional[List[str | Path]] = None) -> List[Path]:
         """
         Scan a directory for .vel files.
         
@@ -48,7 +48,11 @@ class ProjectScanner:
         if not root.exists():
             return []
         
+        excluded = [Path(item).resolve() for item in (exclude_paths or [])]
         for path in root.rglob('*.vel'):
+            resolved = path.resolve()
+            if any(resolved == item or item in resolved.parents for item in excluded):
+                continue
             if self._should_ignore(path):
                 continue
             self.vel_files.append(path)

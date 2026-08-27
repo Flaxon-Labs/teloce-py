@@ -16,6 +16,7 @@ from teloce.cli.doctor import doctor_command
 from teloce.cli.lint import lint_command
 from teloce.cli.create import create_command
 from teloce.cli.benchmark import benchmark_command
+from teloce.cli.compile import compile_command
 from teloce.version import __version__
 
 
@@ -29,6 +30,17 @@ def main(args: Optional[list] = None) -> int:
     Returns:
         Exit code.
     """
+    # Windows users often run the CLI with a legacy cp1252 console.  Teloce's
+    # status output contains useful Unicode symbols, so make output reliable
+    # without requiring users to set PYTHONIOENCODING themselves.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
     parser = argparse.ArgumentParser(
         prog='teloce',
         description='Teloce - A Python compiler for .vel Single File Components',
@@ -52,13 +64,13 @@ def main(args: Optional[list] = None) -> int:
     dev_parser.add_argument(
         '-p', '--port',
         type=int,
-        default=5173,
-        help='Port to run on (default: 5173)'
+        default=None,
+        help='Port to run on (default: teloce.config.json or 5173)'
     )
     dev_parser.add_argument(
         '-H', '--host',
-        default='localhost',
-        help='Host to bind to (default: localhost)'
+        default=None,
+        help='Host to bind to (default: teloce.config.json or 127.0.0.1)'
     )
     dev_parser.add_argument(
         '--no-hmr',
@@ -74,8 +86,8 @@ def main(args: Optional[list] = None) -> int:
     build_parser = subparsers.add_parser('build', help='Build for production')
     build_parser.add_argument(
         '-o', '--out-dir',
-        default='dist',
-        help='Output directory (default: dist)'
+        default=None,
+        help='Output directory (default: teloce.config.json or dist)'
     )
     build_parser.add_argument(
         '--minify',
@@ -92,6 +104,11 @@ def main(args: Optional[list] = None) -> int:
         action='store_true',
         help='Generate source maps'
     )
+
+    compile_parser = subparsers.add_parser('compile', help='Compile one .vel component')
+    compile_parser.add_argument('source', help='Path to a .vel file')
+    compile_parser.add_argument('-o', '--output', help='JavaScript output path (default: next to source)')
+    compile_parser.add_argument('--source-map', action='store_true', help='Write a source map')
     build_parser.add_argument(
         '--no-clean',
         action='store_true',
@@ -116,16 +133,16 @@ def main(args: Optional[list] = None) -> int:
     watch_parser = subparsers.add_parser('watch', help='Watch for changes and rebuild')
     watch_parser.add_argument(
         '-o', '--out-dir',
-        default='dist',
-        help='Output directory (default: dist)'
+        default=None,
+        help='Output directory (default: teloce.config.json or dist)'
     )
     watch_parser.add_argument(
         '--no-hmr',
         action='store_true',
         help='Disable hot module replacement'
     )
-    watch_parser.add_argument('-p', '--port', type=int, default=5173, help='Server port')
-    watch_parser.add_argument('-H', '--host', default='127.0.0.1', help='Server host')
+    watch_parser.add_argument('-p', '--port', type=int, default=None, help='Server port')
+    watch_parser.add_argument('-H', '--host', default=None, help='Server host')
     watch_parser.add_argument('--proxy', help='Backend proxy target URL')
     
     # Debug command
@@ -209,6 +226,7 @@ def main(args: Optional[list] = None) -> int:
         'lint': lint_command,
         'create': create_command,
         'benchmark': benchmark_command,
+        'compile': compile_command,
     }
     
     command_func = command_map.get(parsed_args.command)

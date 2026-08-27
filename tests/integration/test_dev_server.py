@@ -46,6 +46,21 @@ def test_dev_server_serves_html_and_hmr_endpoint(tmp_path: Path):
         server.server_close()
 
 
+def test_dev_server_preserves_no_hmr_query_when_normalizing_root(tmp_path: Path):
+    (tmp_path / "index.html").write_text(
+        "<!doctype html><body><main>App</main></body>", encoding="utf-8"
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path)
+    try:
+        with urlopen(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", timeout=2) as response:
+            html = response.read().decode()
+        assert "App" in html
+        assert "/__teloce_hmr" not in html
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_dev_build_materializes_framework_static_entrypoint(tmp_path: Path):
     (tmp_path / "templates").mkdir()
     (tmp_path / "static" / "js").mkdir(parents=True)

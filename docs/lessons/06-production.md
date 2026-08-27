@@ -3,8 +3,9 @@
 ## Development loop
 
 ```bash
-teloce check .
-teloce build . --out public
+teloce doctor --verbose
+teloce lint --strict
+teloce build --out-dir public
 python app.py
 ```
 

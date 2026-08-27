@@ -39,7 +39,7 @@ The compiler reads the three sections as one component. The template becomes DOM
 ## 2. Compile it
 
 ```bash
-teloce build static/js/components/Welcome.vel --out public/js/components/Welcome.js
+teloce compile static/js/components/Welcome.vel --output public/js/components/Welcome.js
 ```
 
 For a project with many components, use the project build command described in [the CLI guide](../cli.md). Generated JavaScript belongs in your build output; do not edit generated files by hand.

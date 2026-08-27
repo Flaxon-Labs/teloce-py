@@ -60,4 +60,4 @@ templates/index.html:
     <div id="app"></div>
     <script type="module">import { mount } from "{{ url_for('static', filename='js/App.js') }}"; mount("#app");</script>
 
-Run teloce check ., teloce build . --out-dir dist, and python app.py. For production use Gunicorn or another WSGI server, validate and rate-limit JSON endpoints, add CSRF protection for cookie-authenticated writes, and serve hashed assets through a proxy/CDN.
+Run `teloce doctor --verbose`, `teloce lint --strict`, `teloce build --out-dir dist`, and `python app.py`. For production use Gunicorn or another WSGI server, validate and rate-limit JSON endpoints, add CSRF protection for cookie-authenticated writes, and serve hashed assets through a proxy/CDN.

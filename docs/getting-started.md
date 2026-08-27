@@ -85,6 +85,6 @@ python app.py
 
 Visit `http://127.0.0.1:5000`. The server compiles the `.vel` file before Flask starts, serves the generated browser module from `dist/static`, and mounts it into the HTML page.
 
-Use `teloce dev .` while developing. It watches `.vel`, CSS, and local component imports and exposes the development workflow described by `teloce dev --help`.
+Use `teloce dev` while developing from the project root. It reads `teloce.config.json`, builds the project, and starts the development server. Use `teloce watch` when you want the standalone watcher workflow.
 
 Keep the Python server responsible for API calls, authorization, cookies, database work, and HTML delivery. Keep browser state and interaction in components.

@@ -1,0 +1,22 @@
+<template>
+  <section class="notebook-component">
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+  </section>
+</template>
+
+<script>
+export default {
+  name: 'Notebook',
+  data() {
+    return {
+      title: 'Flaxon notebook',
+      message: 'This component is compiled by Teloce and can coexist with the standalone runtime.'
+    };
+  }
+};
+</script>
+
+<style>
+.notebook-component { padding: 1rem; }
+</style>

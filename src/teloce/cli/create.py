@@ -10,6 +10,12 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict
 import shutil
+import json
+import re
+
+
+SUPPORTED_TEMPLATES = {'flask', 'fastapi', 'django', 'flaxon', 'basic'}
+PROJECT_NAME_PATTERN = re.compile(r'^[A-Za-z][A-Za-z0-9_-]*$')
 
 
 def create_command(args: Any) -> int:
@@ -26,9 +32,16 @@ def create_command(args: Any) -> int:
     print("=" * 40)
     
     project_name = args.name
-    template_name = args.template
+    template_name = args.template.lower()
     install_deps = not args.no_install
     init_git = not args.no_git
+
+    if not PROJECT_NAME_PATTERN.fullmatch(project_name):
+        print("❌ Invalid project name. Use letters, numbers, '_' or '-' and start with a letter.")
+        return 1
+    if template_name not in SUPPORTED_TEMPLATES:
+        print(f"❌ Unknown template '{args.template}'. Choose one of: {', '.join(sorted(SUPPORTED_TEMPLATES))}")
+        return 1
     
     project_path = Path.cwd() / project_name
     
@@ -49,8 +62,12 @@ def create_command(args: Any) -> int:
         create_django_template(project_path)
     elif template_name == 'fastapi':
         create_fastapi_template(project_path)
-    else:
+    elif template_name == 'flaxon':
+        create_flaxon_template(project_path)
+    elif template_name == 'basic':
         create_basic_template(project_path)
+
+    create_teloce_config(project_path)
     
     # Create package.json
     create_package_json(project_path, project_name)
@@ -176,12 +193,15 @@ def create_flask_template(project_path: Path) -> None:
     create_basic_template(project_path)
     
     # Create requirements.txt
-    (project_path / 'requirements.txt').write_text("flask>=2.3.0\n")
+    (project_path / 'requirements.txt').write_text(
+        "teloce-py>=0.2.0b1\nflask>=2.3.0\n"
+    )
 
 
 def create_django_template(project_path: Path) -> None:
     """Create a Django project template."""
     create_basic_template(project_path)
+    (project_path / 'app.py').unlink(missing_ok=True)
     (project_path / 'manage.py').write_text("""#!/usr/bin/env python
 import os
 import sys
@@ -194,6 +214,7 @@ if __name__ == '__main__':
     from django.core.management import execute_from_command_line
     execute_from_command_line(sys.argv)
 """.strip())
+    (project_path / 'requirements.txt').write_text("teloce-py>=0.2.0b1\n")
     site = project_path / 'site'
     site.mkdir(exist_ok=True)
     (site / '__init__.py').write_text('')
@@ -223,7 +244,7 @@ application = get_wsgi_application()
     (project_path / 'templates' / 'index.html').write_text("""{% load static %}
 <!doctype html><html><body><div id="app"></div><script type="module">import { mount } from "{% static 'js/App.js' %}"; mount('#app');</script></body></html>
 """.strip())
-    (project_path / 'requirements.txt').write_text("Django>=4.2.0\n")
+    (project_path / 'requirements.txt').write_text("teloce-py>=0.2.0b1\nDjango>=4.2.0\n")
 
 
 def create_fastapi_template(project_path: Path) -> None:
@@ -254,10 +275,100 @@ if __name__ == '__main__':
 <!doctype html><html><body><div id="app"></div><script type="module">import { mount } from "{{ url_for('static', path='js/App.js') }}"; mount('#app');</script></body></html>
 """.strip())
     (project_path / 'requirements.txt').write_text("""
+teloce-py>=0.2.0b1
 fastapi>=0.100.0
 uvicorn>=0.23.0
 jinja2>=3.1.0
-""".strip())
+""".strip() + "\n")
+
+
+def create_flaxon_template(project_path: Path) -> None:
+    """Create a Flaxon + Jinax application with a compiled .vel frontend."""
+    create_basic_template(project_path)
+    (project_path / 'app.py').write_text('''
+import mimetypes
+from pathlib import Path
+
+from flaxon import Flaxon
+from flaxon.http.response import Response
+from flaxon.jinax import Jinax
+from teloce.build import build_project
+
+ROOT = Path(__file__).resolve().parent
+DIST = (ROOT / "dist").resolve()
+app = Flaxon("teloce-flaxon-app", debug=True)
+app.use_templates(Jinax(str(ROOT / "templates"), auto_reload=True))
+
+
+def build_and_register_assets():
+    build_project(ROOT, options={"dev": True, "source_maps": True})
+    for path in DIST.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(DIST).as_posix()
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+
+        async def serve_asset(request, file_path=path, content_type=media_type):
+            return Response(file_path.read_bytes(), media_type=content_type)
+
+        app.get(f"/assets/{relative}")(serve_asset)
+
+
+build_and_register_assets()
+
+
+@app.get("/")
+async def home(request):
+    return await request.render("index.html", {"title": "Flaxon + Teloce"})
+
+
+@app.get("/api/health")
+async def health():
+    return {"ok": True, "service": "teloce-flaxon-app"}
+
+
+if __name__ == "__main__":
+    print("Run: python -m flaxon run app:app --reload")
+'''.strip())
+    (project_path / 'templates' / 'index.html').write_text('''
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }}</title></head>
+<body><div id="app"></div><script type="module">import { mount } from "/assets/static/js/App.js"; mount("#app");</script></body>
+</html>
+'''.strip())
+    (project_path / 'requirements.txt').write_text(
+        "teloce-py>=0.2.0b1\nflaxon>=0.2,<1\n"
+    )
+
+
+def create_teloce_config(project_path: Path) -> None:
+    """Create explicit, documented defaults for a new project."""
+    config = {
+        'compiler': {
+            'source_maps': True,
+            'minify': False,
+            'dev': True,
+            'target': 'es2020',
+        },
+        'build': {
+            'out_dir': 'dist',
+            'static_dir': 'static',
+            'clean': True,
+        },
+        'server': {
+            'host': '127.0.0.1',
+            'port': 5173,
+            'hmr': True,
+        },
+        'watch': {
+            'enabled': True,
+            'debounce': 300,
+        },
+    }
+    (project_path / 'teloce.config.json').write_text(
+        json.dumps(config, indent=2) + '\n', encoding='utf-8'
+    )
 
 
 def create_package_json(project_path: Path, project_name: str) -> None:

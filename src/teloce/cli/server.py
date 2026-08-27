@@ -20,19 +20,22 @@ class _Handler(SimpleHTTPRequestHandler):
         super().__init__(request, client_address, server, directory=server.directory)
 
     def do_GET(self):  # noqa: N802 - stdlib handler API
-        if urlsplit(self.path).path == "/__teloce_hmr":
+        request_url = urlsplit(self.path)
+        request_path = request_url.path
+        request_query = request_url.query
+        if request_path == "/__teloce_hmr":
             if self.headers.get("Upgrade", "").lower() == "websocket":
                 self._serve_websocket()
                 return
             self._serve_events()
             return
-        if urlsplit(self.path).path == "/":
+        if request_path == "/":
             self.path = "/index.html"
         if urlsplit(self.path).path.endswith(".html"):
             candidate = Path(self.server.directory) / urlsplit(self.path).path.lstrip("/")
             if candidate.is_file():
                 body = candidate.read_text(encoding="utf-8")
-                client = '' if 'no_hmr=1' in self.path or not self.server.hmr else '<script>(function(){const reload=()=>{if(window.__teloce_hmr_reload) window.__teloce_hmr_reload().catch(()=>location.reload()); else location.reload();};if(window.WebSocket){const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/__teloce_hmr");ws.onmessage=reload;ws.onerror=()=>{const s=new EventSource("/__teloce_hmr");s.addEventListener("reload",reload);};}else{const s=new EventSource("/__teloce_hmr");s.addEventListener("reload",reload);}})();</script>'
+                client = '' if 'no_hmr=1' in request_query or not self.server.hmr else '<script>(function(){const reload=()=>{if(window.__teloce_hmr_reload) window.__teloce_hmr_reload().catch(()=>location.reload()); else location.reload();};if(window.WebSocket){const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/__teloce_hmr");ws.onmessage=reload;ws.onerror=()=>{const s=new EventSource("/__teloce_hmr");s.addEventListener("reload",reload);};}else{const s=new EventSource("/__teloce_hmr");s.addEventListener("reload",reload);}})();</script>'
                 body = body.replace("</body>", client + "</body>")
                 data = body.encode("utf-8")
                 self.send_response(200)

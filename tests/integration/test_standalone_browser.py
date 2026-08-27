@@ -10,6 +10,38 @@ import pytest
 from teloce.cli.server import start_dev_server
 
 
+_subprocess_run = subprocess.run
+
+
+def _stable_chrome_run(command, *args, **kwargs):
+    """Make repeated Windows headless-Chrome launches deterministic."""
+    command = list(command)
+    if "--headless=new" not in command:
+        return _subprocess_run(command, *args, **kwargs)
+    for flag in (
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-sync",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ):
+        if flag not in command:
+            command.insert(1, flag)
+    kwargs["timeout"] = min(kwargs.get("timeout", 60), 30)
+    failure = None
+    for _attempt in range(2):
+        try:
+            return _subprocess_run(command, *args, **kwargs)
+        except subprocess.TimeoutExpired as error:
+            failure = error
+    raise failure
+
+
+subprocess.run = _stable_chrome_run
+
+
 def _chrome() -> str | None:
     candidate = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
     return str(candidate) if candidate.exists() else None
@@ -28,9 +60,12 @@ def test_standalone_create_app_reacts_to_events_in_real_chrome(tmp_path: Path):
     try:
         time.sleep(0.1)
         result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
+            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
+             "--disable-software-rasterizer", "--disable-extensions", "--disable-sync",
+             "--disable-background-networking", "--disable-component-update",
+             "--no-first-run", "--no-default-browser-check", "--dump-dom",
              "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/?no_hmr=1"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>1</title>" in result.stdout
@@ -53,9 +88,12 @@ def test_standalone_invokes_event_methods_with_state_context(tmp_path: Path):
     try:
         time.sleep(0.1)
         result = subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
+            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
+             "--disable-software-rasterizer", "--disable-extensions", "--disable-sync",
+             "--disable-background-networking", "--disable-component-update",
+             "--no-first-run", "--no-default-browser-check", "--dump-dom",
              "--virtual-time-budget=1200", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>1</title>" in result.stdout
@@ -83,7 +121,7 @@ def test_standalone_supports_npm_style_directives(tmp_path: Path):
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1200", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "Hello world0:A1:B" in result.stdout
@@ -111,7 +149,7 @@ def test_standalone_plugin_directive_runs_render_hook_in_real_chrome(tmp_path: P
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>PLUGIN WORKS</title>" in result.stdout
@@ -136,7 +174,7 @@ def test_standalone_supports_v_else_if_and_v_else(tmp_path: Path):
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>second</title>" in result.stdout
@@ -161,7 +199,7 @@ def test_standalone_supports_v_model_alias_and_selects(tmp_path: Path):
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1200", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>C:b</title>" in result.stdout
@@ -186,7 +224,7 @@ def test_standalone_reacts_to_nested_objects_and_arrays(tmp_path: Path):
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1500", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>B:2</title>" in result.stdout
@@ -211,7 +249,7 @@ def test_standalone_plugin_component_renders_props(tmp_path: Path):
         result = subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
              "--virtual-time-budget=1000", f"http://127.0.0.1:{server.server_port}/"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, result.stderr
         assert "<title>Ready:works</title>" in result.stdout

@@ -37,12 +37,14 @@ def dev_command(args: Any) -> int:
     
     # Load configuration
     config = ProjectConfiguration()
-    config.load()
+    config.load(discovery.config_file)
     
     # Get dev server config
     server_config = config.get_server_config()
-    port = args.port or server_config.get('port', 5173)
-    host = args.host or server_config.get('host', 'localhost')
+    port = args.port if args.port is not None else server_config.get('port', 5173)
+    host = args.host if args.host is not None else server_config.get('host', 'localhost')
+    out_dir = config.get_build_config().get('out_dir', 'dist')
+    output_dir = Path(out_dir) if Path(out_dir).is_absolute() else discovery.root_dir / out_dir
     hmr = not args.no_hmr and server_config.get('hmr', True)
     
     print(f"🌐 Server: http://{host}:{port}")
@@ -52,8 +54,11 @@ def dev_command(args: Any) -> int:
     # Build initially
     print("📦 Building project...")
     builder = Builder({'dev': True, 'source_maps': True, 'clean': True})
-    builder.build(discovery.root_dir, discovery.root_dir / 'dist')
-    server = start_dev_server(host, port, discovery.root_dir / 'dist', proxy_target=getattr(args, 'proxy', None), hmr=hmr)
+    result = builder.build(discovery.root_dir, output_dir)
+    if result['errors']:
+        print(f"❌ Initial build failed: {len(result['errors'])} errors")
+        return 1
+    server = start_dev_server(host, port, output_dir, proxy_target=getattr(args, 'proxy', None), hmr=hmr)
     
     # Set up watcher
     if hmr:
@@ -72,7 +77,10 @@ def dev_command(args: Any) -> int:
         
         def on_change(event):
             print(f"📝 File changed: {event.path}")
-            builder.build(discovery.root_dir, discovery.root_dir / 'dist')
+            result = builder.build(discovery.root_dir, output_dir)
+            if result['errors']:
+                print(f"❌ Rebuild failed: {len(result['errors'])} errors")
+                return
             server.notify_reload()
             print("✅ Rebuild complete")
         

@@ -34,13 +34,14 @@ def build_command(args: Any) -> int:
     
     # Load configuration
     config = ProjectConfiguration()
-    config.load()
+    config.load(discovery.config_file)
     
     # Get build config
     build_config = config.get_build_config()
-    out_dir = args.out_dir or build_config.get('out_dir', 'dist')
+    out_dir = args.out_dir if args.out_dir is not None else build_config.get('out_dir', 'dist')
     minify = args.minify or (not args.no_minify and build_config.get('minify', False))
-    source_map = args.source_map or build_config.get('source_maps', False)
+    compiler_config = config.get_compiler_config()
+    source_map = args.source_map or compiler_config.get('source_maps', build_config.get('source_maps', False))
     clean = not getattr(args, 'no_clean', False) and build_config.get('clean', True)
     
     print(f"📂 Output: {out_dir}")

@@ -6,6 +6,7 @@ Lints .vel files for issues and potential problems.
 
 import sys
 import re
+import copy
 from pathlib import Path
 from typing import Any, List, Dict
 
@@ -50,21 +51,64 @@ def lint_command(args: Any) -> int:
         if file_issues:
             issues.extend(file_issues)
     
+    if issues and args.fix:
+        # Apply edits once per file, then run the linter again. This prevents
+        # the CLI from claiming a suggestion was fixed when nothing changed.
+        files = {Path(issue['file']) for issue in issues if issue.get('fix')}
+        fixed = sum(1 for path in files if apply_lint_fixes(path, issues))
+        verify_args = copy.copy(args)
+        verify_args.fix = False
+        remaining = []
+        for vel_file in vel_files:
+            remaining.extend(lint_file(vel_file, verify_args))
+        if not remaining:
+            print(f"✅ Fixed {fixed} file(s); no issues remain.")
+            return 0
+        issues = remaining
+        print(f"⚠️  Applied fixes to {fixed} file(s); {len(issues)} issue(s) still require attention:")
+
     if issues:
         print(f"❌ Found {len(issues)} issues:")
         for issue in issues:
             print(f"   {issue['file']}:{issue.get('line', '?')} - {issue['message']}")
             if args.fix and issue.get('fix'):
                 print(f"      💡 {issue['fix']}")
-        
-        if args.fix:
-            print()
-            print("✅ Issues fixed!")
-        
         return 1
     
     print("✅ No issues found!")
     return 0
+
+
+def apply_lint_fixes(file_path: Path, issues: List[Dict[str, Any]]) -> bool:
+    """Apply conservative, syntax-preserving fixes only."""
+    try:
+        content = file_path.read_text(encoding='utf-8')
+    except OSError:
+        return False
+
+    updated = content
+    issue_messages = {
+        issue.get('message', '') for issue in issues
+        if issue.get('file') == str(file_path)
+    }
+    if 'Missing <script> section' in issue_messages and not re.search(
+        r'<script(?:\s[^>]*)?>', updated, re.IGNORECASE
+    ):
+        updated = updated.rstrip() + "\n\n<script>\nexport default {};\n</script>\n"
+
+    if 'For loop missing "key" attribute' in issue_messages:
+        def add_index_key(match: re.Match[str]) -> str:
+            tag = match.group(0)
+            return tag if re.search(r'\bkey\s*=', tag, re.IGNORECASE) else tag[:-1] + ' key="index">'
+        updated = re.sub(r'<for\b[^>]*>', add_index_key, updated, flags=re.IGNORECASE)
+
+    if any(message.startswith('Found ') and 'empty interpolations' in message for message in issue_messages):
+        updated = re.sub(r'\{\{\s*\}\}', '', updated)
+
+    if updated == content:
+        return False
+    file_path.write_text(updated, encoding='utf-8')
+    return True
 
 
 def lint_file(file_path: Path, args: Any) -> List[Dict[str, Any]]:
@@ -132,7 +176,7 @@ def lint_file(file_path: Path, args: Any) -> List[Dict[str, Any]]:
                     'file': str(file_path),
                     'line': line,
                     'message': 'For loop missing "key" attribute',
-                    'fix': 'Add key="id" attribute to for loop' if args.fix else None,
+                    'fix': 'Add key="index" attribute to for loop' if args.fix else None,
                 })
         
         # Check for empty interpolations

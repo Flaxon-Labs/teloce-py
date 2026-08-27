@@ -36,14 +36,14 @@ def watch_command(args: Any) -> int:
     
     # Load configuration
     config = ProjectConfiguration()
-    config.load()
+    config.load(discovery.config_file)
     
     # Get watch config
     watch_config = config.get('watch', {})
-    out_dir = args.out_dir or config.get_build_config().get('out_dir', 'dist')
+    out_dir = args.out_dir if args.out_dir is not None else config.get_build_config().get('out_dir', 'dist')
     hmr = not args.no_hmr and watch_config.get('enabled', True)
-    host = getattr(args, 'host', None) or config.get_server_config().get('host', '127.0.0.1')
-    port = getattr(args, 'port', None) or config.get_server_config().get('port', 5173)
+    host = args.host if getattr(args, 'host', None) is not None else config.get_server_config().get('host', '127.0.0.1')
+    port = args.port if getattr(args, 'port', None) is not None else config.get_server_config().get('port', 5173)
     output_dir = Path(out_dir) if Path(out_dir).is_absolute() else discovery.root_dir / out_dir
     
     print(f"📂 Output: {out_dir}")

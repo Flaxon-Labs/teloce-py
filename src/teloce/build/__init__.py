@@ -1,0 +1,37 @@
+"""
+Build package for Teloce.
+
+Provides build system for compiling .vel files.
+"""
+
+from teloce.build.builder import Builder
+from teloce.build.writer import FileWriter
+from teloce.build.manifest import ManifestGenerator
+from teloce.build.assets import AssetManager
+from teloce.build.bundler import ModuleBundler, BundleError
+
+
+def build_project(root_dir, out_dir=None, options=None):
+    """Compile a project's `.vel` files for a Python web-server startup.
+
+    Raises ``RuntimeError`` when any component fails, preventing a server
+    from starting with stale or incomplete frontend assets.
+    """
+    result = Builder(options or {}).build(root_dir, out_dir)
+    if result.get("failed"):
+        details = "\n".join(
+            f"{item.get('file')}: {item.get('error')}"
+            for item in result.get("errors", [])
+        )
+        raise RuntimeError(f"Teloce build failed:\n{details}")
+    return result
+
+__all__ = [
+    "Builder",
+    "FileWriter",
+    "ManifestGenerator",
+    "AssetManager",
+    "ModuleBundler",
+    "BundleError",
+    "build_project",
+]

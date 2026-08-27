@@ -44,7 +44,7 @@ teloce dev --no-hmr
 teloce dev --proxy http://127.0.0.1:5000
 ```
 
-Options: `--port`/`-p` (default `5173`), `--host`/`-H` (default `localhost`), `--no-hmr`, and `--proxy URL`.
+Options: `--port`/`-p`, `--host`/`-H`, `--no-hmr`, and `--proxy URL`. When omitted, host and port come from `teloce.config.json` and then fall back to `127.0.0.1:5173`.
 
 ## `teloce watch`
 
@@ -107,9 +107,25 @@ teloce create my-app --template flask
 teloce create my-api --template fastapi
 teloce create my-site --template django
 teloce create basic-app --template basic
+teloce create flaxon-app --template flaxon
 ```
 
-Options are `--template`, `--no-install`, and `--no-git`. Templates are `flask`, `fastapi`, `django`, and the basic fallback template.
+Options are `--template`, `--no-install`, and `--no-git`. Templates are `flask`, `fastapi`, `django`, `flaxon`, and `basic`. The `flaxon` template creates a Flaxon + Jinax backend, a compiled `.vel` frontend, an asset route, and a health endpoint. The command validates the project name, creates a `teloce.config.json`, includes `teloce-py` in generated requirements, and refuses unknown templates.
+
+### Generated `teloce.config.json`
+
+Every new project gets explicit defaults that can be committed with the project:
+
+```json
+{
+  "compiler": { "source_maps": true, "minify": false, "dev": true, "target": "es2020" },
+  "build": { "out_dir": "dist", "static_dir": "static", "clean": true },
+  "server": { "host": "127.0.0.1", "port": 5173, "hmr": true },
+  "watch": { "enabled": true, "debounce": 300 }
+}
+```
+
+`dev`, `watch`, and `build` load this file automatically. Command-line options override its values.
 
 ## `teloce debug`
 
@@ -148,9 +164,16 @@ teloce benchmark . --iterations 5 --json
 
 Use `--json` for CI and performance tracking.
 
-## Single-file compilation
+## `teloce compile`
 
-The current CLI does not have a `teloce compile` subcommand. Use `teloce build` for project compilation or call the public Python API for one file:
+Compile one component without creating a project:
+
+```bash
+teloce compile static/js/App.vel -o dist/js/App.js
+teloce compile static/js/App.vel -o dist/js/App.js --source-map
+```
+
+The CSS is written beside the JavaScript output and diagnostics are printed as JSON. The default output is next to the source with a `.js` extension. The equivalent Python API is:
 
 ```python
 from pathlib import Path

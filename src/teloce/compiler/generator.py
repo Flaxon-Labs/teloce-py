@@ -319,9 +319,11 @@ class Generator:
             'const __applyBinding = (element, name, value) => { if (name === "class") { element.className = __mapClass(value) ?? ""; } else if (name === "style" && value && typeof value === "object") { for (const [key, item] of Object.entries(value)) element.style[key] = item ?? ""; } else if (name === "show" || name === "hide") { element.hidden = name === "show" ? !Boolean(value) : Boolean(value); } else if (name === "html") { element.innerHTML = value == null ? "" : String(value); } else if (name === "text") { element.textContent = value == null ? "" : String(value); } else if (["disabled", "checked", "selected", "readonly", "required", "multiple"].includes(name)) { element.toggleAttribute(name, Boolean(value)); } else if (value === false || value == null) element.removeAttribute(name); else element.setAttribute(name, String(value)); };',
             'const __patch = (target, html) => {',
             '  const template = document.createElement("template"); template.innerHTML = html;',
+            '  const markManaged = node => { if (!node) return node; node.__teloceManaged = true; if (node.nodeType === 1) { node.__teloceManagedAttributes = new Set(Array.from(node.attributes).map(attribute => attribute.name)); for (const child of Array.from(node.childNodes)) markManaged(child); } return node; };',
+            '  const cloneManaged = node => markManaged(node.cloneNode(true));',
             '  const disposeNode = node => { if (!node) return; if (node.__teloceInstance?.unmount) node.__teloceInstance.unmount(); if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options); for (const child of Array.from(node.childNodes || [])) disposeNode(child); };',
             '  const patchNode = (oldNode, newNode) => {',
-            '    if (!oldNode || oldNode.nodeType !== newNode.nodeType || (oldNode.nodeType === 1 && oldNode.tagName !== newNode.tagName)) return newNode.cloneNode(true);',
+            '    if (!oldNode || oldNode.nodeType !== newNode.nodeType || (oldNode.nodeType === 1 && oldNode.tagName !== newNode.tagName)) return cloneManaged(newNode);',
             '    if (oldNode.nodeType === 3) { if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue; return oldNode; }',
             '    const managedAttributes = oldNode.__teloceManagedAttributes || new Set(); for (const attr of Array.from(oldNode.attributes)) if (managedAttributes.has(attr.name) && !newNode.hasAttribute(attr.name)) oldNode.removeAttribute(attr.name);',
             '    for (const attr of Array.from(newNode.attributes)) if (oldNode.getAttribute(attr.name) !== attr.value) oldNode.setAttribute(attr.name, attr.value);',
@@ -329,9 +331,9 @@ class Generator:
             '    patchChildren(oldNode, newNode); return oldNode;',
             '  };',
             '  const patchChildren = (parent, templateParent) => {',
-            '    const old = Array.from(parent.childNodes); const next = Array.from(templateParent.childNodes); const keyed = new Map(old.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node])); const used = new Set();',
-            '    next.forEach((newNode, index) => { const key = newNode.nodeType === 1 ? newNode.dataset.teloceKey : null; let oldNode = key && keyed.has(key) ? keyed.get(key) : old[index]; if (oldNode && used.has(oldNode)) oldNode = null; if (oldNode) used.add(oldNode); const result = oldNode ? patchNode(oldNode, newNode) : newNode.cloneNode(true); if (result !== oldNode) { if (oldNode && oldNode.parentNode === parent) { disposeNode(oldNode); parent.replaceChild(result, oldNode); } else parent.insertBefore(result, parent.childNodes[index] || null); } else if (result !== parent.childNodes[index]) parent.insertBefore(result, parent.childNodes[index] || null); });',
-            '    for (const oldNode of old) if (!used.has(oldNode) && oldNode.parentNode === parent) { disposeNode(oldNode); parent.removeChild(oldNode); }',
+            '    const old = Array.from(parent.childNodes); const next = Array.from(templateParent.childNodes); const managed = old.filter(node => node.__teloceManaged); const keyed = new Map(managed.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node])); const used = new Set(); let cursor = 0; let anchor = parent.firstChild;',
+            '    next.forEach(newNode => { const key = newNode.nodeType === 1 ? newNode.dataset.teloceKey : null; let oldNode = key && keyed.has(key) ? keyed.get(key) : (key ? null : managed[cursor++]); if (oldNode && used.has(oldNode)) oldNode = null; if (oldNode) used.add(oldNode); const result = oldNode ? patchNode(oldNode, newNode) : cloneManaged(newNode); if (result !== oldNode) { if (oldNode && oldNode.parentNode === parent) { disposeNode(oldNode); parent.replaceChild(result, oldNode); } else parent.insertBefore(result, anchor || null); } else if (result !== anchor) parent.insertBefore(result, anchor || null); anchor = result.nextSibling; });',
+            '    for (const oldNode of managed) if (!used.has(oldNode) && oldNode.parentNode === parent) { disposeNode(oldNode); parent.removeChild(oldNode); }',
             '  };',
             '  patchChildren(target, template.content);',
             '};',
@@ -359,8 +361,8 @@ class Generator:
             '  if (typeof target === "string") target = document.querySelector(target);',
             '  if (!target) throw new Error("Teloce mount target was not found");',
             '  __installStyle();',
-            '  let update = () => {}; let rendering = false; let updateQueued = false;',
-            '  const requestUpdate = () => { if (rendering) { updateQueued = true; return; } rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; queueMicrotask(requestUpdate); } } };',
+            '  let update = () => {}; let rendering = false; let updateQueued = false; let updateScheduled = false;',
+            '  const requestUpdate = () => { if (rendering || updateScheduled) { updateQueued = true; return; } updateScheduled = true; queueMicrotask(() => { updateScheduled = false; rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; requestUpdate(); } } }); };',
             '  let mounted = false;',
             '  let previous = {};',
             '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { set(object, key, value) { object[key] = value; requestUpdate(); return true; } });',
@@ -411,12 +413,23 @@ class Generator:
             '  update();',
             '  const updateProps = nextProps => { for (const [key, value] of Object.entries(__normalizeProps(nextProps))) state[key] = value; };',
             '  const __hmrRecord = { target, state, reload: async () => { const snapshot = {}; for (const key of Object.keys(state)) if (!key.startsWith("$") && typeof state[key] !== "function") snapshot[key] = state[key]; __unregisterHmr(__hmrRecord); const fresh = await import(`${__moduleUrl}?teloce_hmr=${Date.now()}`); return fresh.mount(target, snapshot); } }; __registerHmr(__hmrRecord);',
-            '  const __instance = { state, update, updateProps, unmount: () => { if (typeof __component.beforeUnmount === "function") __component.beforeUnmount.call(state); __unregisterHmr(__hmrRecord); target.querySelectorAll("*").forEach(element => element.__teloceInstance?.unmount?.()); target.replaceChildren(); if (typeof __component.unmounted === "function") __component.unmounted.call(state); } }; __hmrRecord.instance = __instance; return __instance;',
+            '  const __instance = { state, update, updateProps, unmount: () => { if (!mounted) return; if (typeof __component.beforeUnmount === "function") __component.beforeUnmount.call(state); __unregisterHmr(__hmrRecord); const nodes = [target, ...target.querySelectorAll("*")]; nodes.forEach(element => { element.__teloceInstance?.unmount?.(); if (element.__teloceHandlers) for (const record of element.__teloceHandlers.values()) element.removeEventListener(record.actualEvent, record.listener, record.options); element.__teloceHandlers?.clear?.(); element.__teloceInstance = undefined; element.__teloceMounted = false; }); target.replaceChildren(); mounted = false; if (typeof __component.unmounted === "function") __component.unmounted.call(state); } }; __hmrRecord.instance = __instance; return __instance;',
             '}',
             'export const createApp = mount;',
             '__component.mount = mount;',
         ]
-        return [line.replace("else __evaluate(handlerName", "else __runEventExpression(handlerName") for line in runtime]
+        return [
+            line
+            .replace("else __evaluate(handlerName", "else __runEventExpression(handlerName")
+            # Run user handlers after the native event dispatch finishes. This
+            # prevents synchronous DOM reconciliation from mutating the active
+            # event target and keeps state updates consistently batched.
+            .replace(
+                'const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __runEventExpression(handlerName, { ...state, event, $event: event });',
+                'queueMicrotask(() => { const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __runEventExpression(handlerName, { ...state, event, $event: event }); });',
+            )
+            for line in runtime
+        ]
 
     def _component_imports(self, component: Component) -> dict:
         """Return local component names and their generated import paths."""

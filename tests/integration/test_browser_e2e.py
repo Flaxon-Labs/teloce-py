@@ -22,15 +22,23 @@ def _chrome() -> str | None:
 
 
 def _dump_dom(url: str, budget: int):
-    """Run Chrome with a disposable profile so an installed Chrome session cannot block CI."""
-    with tempfile.TemporaryDirectory(prefix="teloce-chrome-") as profile:
-        return subprocess.run(
-            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
-             "--disable-extensions", "--no-first-run", "--no-default-browser-check",
-             f"--user-data-dir={profile}", "--dump-dom",
-             f"--virtual-time-budget={budget}", url],
-            capture_output=True, text=True, timeout=20,
-        )
+    """Run Chrome with disposable profiles and retry transient startup stalls."""
+    failure = None
+    for _attempt in range(2):
+        with tempfile.TemporaryDirectory(prefix="teloce-chrome-") as profile:
+            try:
+                return subprocess.run(
+                    [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
+                     "--disable-software-rasterizer", "--disable-extensions", "--disable-sync",
+                     "--disable-background-networking", "--disable-component-update",
+                     "--no-first-run", "--no-default-browser-check",
+                     f"--user-data-dir={profile}", "--dump-dom",
+                     f"--virtual-time-budget={budget}", url],
+                    capture_output=True, text=True, timeout=30,
+                )
+            except subprocess.TimeoutExpired as error:
+                failure = error
+    raise failure
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")

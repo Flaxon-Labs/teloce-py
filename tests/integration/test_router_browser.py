@@ -21,9 +21,11 @@ def _dump_dom(url: str):
     with tempfile.TemporaryDirectory(prefix="teloce-router-chrome-") as profile:
         return subprocess.run(
             [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu",
-             "--disable-extensions", "--no-first-run", "--no-default-browser-check",
+             "--disable-software-rasterizer", "--disable-extensions", "--disable-sync",
+             "--disable-background-networking", "--disable-component-update",
+             "--no-first-run", "--no-default-browser-check",
              f"--user-data-dir={profile}", "--dump-dom", "--virtual-time-budget=1500", url],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
 
 

@@ -171,6 +171,24 @@ export default {
         assert result['success'] is True
         assert 'MyComponent' in result['code']
 
+    def test_module_helpers_do_not_duplicate_component_export(self):
+        """Module helpers must survive without emitting a second default export."""
+        source = """
+<template><div>{{ label }}</div></template>
+<script>
+const labelPrefix = `ready-${1 + 1}`;
+export default {
+    name: 'ExportOnce',
+    data() { return { label: labelPrefix }; }
+};
+</script>
+"""
+        result = compile(source, "ExportOnce.vel")
+        assert result['success'] is True
+        assert result['code'].count('export default __component;') == 1
+        assert 'export default {' not in result['code']
+        assert 'labelPrefix' in result['code']
+
     def test_compile_file(self):
         """Test compiling a file."""
         import tempfile

@@ -57,6 +57,8 @@ class Compiler:
                 DiagnosticLevel.ERROR,
                 f"Compilation failed: {exc}",
                 filename=filename,
+                line=getattr(exc, "lineno", None),
+                column=getattr(exc, "offset", None),
                 code="E1000",
             )
             return self._empty_result()
@@ -226,9 +228,18 @@ def compile_file(filepath: str | Path, **options) -> Dict[str, Any]:
             "css": "",
             "map": None,
             "diagnostics": {
-                "errors": [f"File not found: {filepath}"],
+                "errors": [{
+                    "message": f"File not found: {filepath}",
+                    "filename": str(filepath),
+                    "line": None,
+                    "column": None,
+                    "code": "E0001",
+                    "suggestions": ["Check the path and make sure the .vel file exists."],
+                    "notes": [],
+                }],
                 "warnings": [],
                 "info": [],
+                "hints": [],
             },
             "ast": None,
             "component": None,
@@ -253,8 +264,11 @@ def compile_project(root_dir: str | Path, **options) -> Dict[str, Any]:
     root_dir = Path(root_dir)
     results = {}
     
-    # Find all .vel files
-    vel_files = list(root_dir.rglob("*.vel"))
+    # Use the same project boundary rules as the build pipeline so generated
+    # output (dist/build/.venv/etc.) is never compiled as source on a second
+    # invocation.
+    from teloce.project.scanner import ProjectScanner
+    vel_files = ProjectScanner().scan(root_dir)
     
     for vel_file in vel_files:
         rel_path = vel_file.relative_to(root_dir)

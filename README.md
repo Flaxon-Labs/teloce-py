@@ -181,7 +181,7 @@ result = build_project(
     out_dir="dist",
     options={"source_maps": True, "hash_assets": True, "bundle": True},
 )
-print(result.files)
+    print(result['compiled'], 'component(s) compiled')
 ```
 
 Serve `dist/` from the Python application or a reverse proxy. Keep source maps private when your deployment policy requires it. Run `teloce dev` during development for watching and browser HMR.
@@ -214,7 +214,7 @@ Compatibility is a contract to test, not a claim that every third-party npm plug
 - [Components, imports, slots, and props](docs/components.md)
 - [Plugins, filters, and directives](docs/plugins.md)
 - [Router and runtime](docs/router.md)
-- [CSS and scoped styles](docs/css.md)
+- [CSS and scoped styles](docs/scoped-css.md)
 - [VS Code extension](docs/vscode.md)
 - [Real-world examples](docs/real-world-examples.md)
 - [Contributing](CONTRIBUTING.md)

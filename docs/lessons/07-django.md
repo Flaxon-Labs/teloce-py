@@ -76,4 +76,4 @@ Add routes for /, /api/pages, /api/pages/<slug>, and /admin/. Use Django CSRF to
     {% load static %}<div id="app"></div>
     <script type="module">import { mount } from "{% static 'js/App.js' %}"; mount("#app");</script>
 
-Build with teloce check . and teloce build . --out-dir dist, then run python manage.py runserver. In production use collectstatic, a production WSGI/ASGI server, and protected admin authorization.
+Run `teloce doctor --verbose`, `teloce lint --strict`, and `teloce build --out-dir dist`, then run `python manage.py runserver`. In production use collectstatic, a production WSGI/ASGI server, and protected admin authorization.
