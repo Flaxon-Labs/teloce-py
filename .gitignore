@@ -172,6 +172,7 @@ static/css/*.css
 tmp/
 temp/
 *.tmp
+.teloce-esbuild-check/
 
 # Coverage
 .coverage

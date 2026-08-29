@@ -197,3 +197,14 @@ Path("static/js/App.js").write_text(result["code"], encoding="utf-8")
 | Check setup | `teloce doctor --verbose` |
 | Validate templates | `teloce lint --strict` |
 | Benchmark compilation | `teloce benchmark . --json` |
+
+## Exit codes and CI
+
+Commands return zero only when their requested operation succeeds. `lint`,
+`doctor`, `compile`, and `build` return non-zero for diagnostics or missing
+configuration, so they can be used directly in CI. `lint --fix` only applies
+safe, known formatting fixes; it does not rewrite arbitrary JavaScript.
+
+For a reproducible pipeline, run `doctor`, strict lint, tests, and the
+production build in that order. Keep the generated manifest and all lazy
+chunks together when deploying.

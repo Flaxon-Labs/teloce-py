@@ -1,0 +1,126 @@
+<template>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top"><span class="mark">V</span><span>Teloce</span><small>FLAXON LABS</small></a>
+      <nav><a href="#cheatsheet">Cheatsheet</a><a href="#examples">Examples</a><a href="https://github.com/Flaxon-Labs/teloce-py" target="_blank">GitHub ↗</a></nav>
+    </header>
+    <section id="top" class="hero">
+      <p class="eyebrow">40 compiled components · Teloce 0.2.x · Flaxon</p>
+      <h1>Build readable interfaces<br /><em>at Python speed.</em></h1>
+      <p class="lead">A living cheatsheet for the .vel Single File Component format. Search the patterns, copy the syntax, and see how Flaxon serves the result.</p>
+      <label class="search"><span>⌕</span><input aria-label="Search cheatsheet" v-model="query" placeholder="Search directives, signals, components..."/><kbd>⌘ K</kbd></label>
+      <div class="pills"><button v-for="category in categories" @click="selectCategory(category)" :class="{ active: selected === category }">{{ category }}</button></div>
+    </section>
+    <section id="cheatsheet" class="content">
+      <aside><p class="side-label">ON THIS PAGE</p><a v-for="category in categories" :class="{ active: selected === category }" @click="selectCategory(category)">{{ category }}</a><div class="build-note"><b>Build status</b><span>● 40 / 40 compiled</span><small>Flaxon ASGI · source maps on</small></div></aside>
+      <div class="main-column">
+        <div class="section-heading"><div><p class="eyebrow">THE FIELD GUIDE</p><h2>{{ selected }}</h2></div><span>{{ visibleCount }} patterns</span></div>
+        <div class="cards">
+          <div v-for="item in visibleItems" class="card-shell">
+            <article class="card">
+              <div class="card-top"><span class="number">{{ item.number }}</span><span class="tag">{{ item.tag }}</span></div>
+              <h3>{{ item.title }}</h3><p>{{ item.description }}</p><pre><code>{{ item.code }}</code></pre>
+              <button class="copy" @click="copy(item.code)">Copy snippet</button>
+            </article>
+          </div>
+        </div>
+        <p v-if="visibleCount === 0" class="empty">No pattern matches “{{ query }}”. Try “signals”, “router”, or “CSS”.</p>
+      </div>
+    </section>
+    <section id="examples" class="examples"><p class="eyebrow">COMPILED IN THIS PROJECT</p><h2>Forty small components.<br /><em>One clear mental model.</em></h2><div class="component-grid"><Badge /><ButtonExample /><CardExample /><ConditionalExample /><LoopExample /><SignalExample /><FormExample /><RouterExample /><PropsExample /><SlotExample /><FilterExample /><ClassExample /><StyleExample /><ModuleExample /><LifecycleExample /><EffectExample /><ComputedExample /><WatchExample /><AsyncExample /><ApiExample /><FlaxonExample /><JinaxExample /><ImportExample /><NamedImportExample /><DynamicExample /><AccessibilityExample /><MediaExample /><TableExample /><TabsExample /><ModalExample /><ToastExample /><ThemeExample /><ResponsiveExample /><AnimationExample /><ThreeExample /><ErrorExample /><TestingExample /><DeployExample /><SecurityExample /></div></section>
+    <footer><span>Made with .vel + Flaxon</span><span>Compiled and served from Python</span></footer>
+  </main>
+</template>
+
+<script>
+import Badge from "./components/Badge.vel";
+import ButtonExample from "./components/ButtonExample.vel";
+import CardExample from "./components/CardExample.vel";
+import ConditionalExample from "./components/ConditionalExample.vel";
+import LoopExample from "./components/LoopExample.vel";
+import SignalExample from "./components/SignalExample.vel";
+import FormExample from "./components/FormExample.vel";
+import RouterExample from "./components/RouterExample.vel";
+import PropsExample from "./components/PropsExample.vel";
+import SlotExample from "./components/SlotExample.vel";
+import FilterExample from "./components/FilterExample.vel";
+import ClassExample from "./components/ClassExample.vel";
+import StyleExample from "./components/StyleExample.vel";
+import ModuleExample from "./components/ModuleExample.vel";
+import LifecycleExample from "./components/LifecycleExample.vel";
+import EffectExample from "./components/EffectExample.vel";
+import ComputedExample from "./components/ComputedExample.vel";
+import WatchExample from "./components/WatchExample.vel";
+import AsyncExample from "./components/AsyncExample.vel";
+import ApiExample from "./components/ApiExample.vel";
+import FlaxonExample from "./components/FlaxonExample.vel";
+import JinaxExample from "./components/JinaxExample.vel";
+import ImportExample from "./components/ImportExample.vel";
+import NamedImportExample from "./components/NamedImportExample.vel";
+import DynamicExample from "./components/DynamicExample.vel";
+import AccessibilityExample from "./components/AccessibilityExample.vel";
+import MediaExample from "./components/MediaExample.vel";
+import TableExample from "./components/TableExample.vel";
+import TabsExample from "./components/TabsExample.vel";
+import ModalExample from "./components/ModalExample.vel";
+import ToastExample from "./components/ToastExample.vel";
+import ThemeExample from "./components/ThemeExample.vel";
+import ResponsiveExample from "./components/ResponsiveExample.vel";
+import AnimationExample from "./components/AnimationExample.vel";
+import ThreeExample from "./components/ThreeExample.vel";
+import ErrorExample from "./components/ErrorExample.vel";
+import TestingExample from "./components/TestingExample.vel";
+import DeployExample from "./components/DeployExample.vel";
+import SecurityExample from "./components/SecurityExample.vel";
+export default {
+  data() { return { query: '', selected: 'Essentials', copied: false, categories: ['Essentials', 'Reactivity', 'UI patterns', 'Backend', 'Production'], items: [
+    { number: '01', tag: 'template', title: 'A component starts with HTML', category: 'Essentials', description: 'Keep structure, behavior, and style together in one readable file.', code: '&lt;template&gt;\n  &lt;button @click="save"&gt;Save&lt;/button&gt;\n&lt;/template&gt;' },
+    { number: '02', tag: 'v-if', title: 'Render conditionally', category: 'Essentials', description: 'Use familiar directives for clear conditional UI.', code: '<p v-if="ready">Ready to ship.</p>' },
+    { number: '03', tag: 'v-for', title: 'Render a collection', category: 'Essentials', description: 'Loops are compiled into reactive DOM output.', code: '<li v-for="item in items" :key="item.id">{{ item.name }}</li>' },
+    { number: '04', tag: 'import', title: 'Compose .vel files', category: 'Essentials', description: 'Import a component and use it like a native element.', code: 'import Card from &quot;./Card.vel&quot;;\n<Card />' },
+    { number: '05', tag: 'event', title: 'Handle user input', category: 'UI patterns', description: 'Events stay close to the element they control.', code: '<form @submit.prevent="submit">...</form>' },
+    { number: '06', tag: 'v-model', title: 'Bind form controls', category: 'UI patterns', description: 'Two-way binding keeps forms concise.', code: '&lt;input v-model="email" type="email"&gt;' },
+    { number: '07', tag: 'signals', title: 'Use runtime signals', category: 'Reactivity', description: 'Signals are ideal for tiny independent reactive values.', code: 'const count = createSignal(0);\ncount.set(count() + 1)' },
+    { number: '08', tag: 'computed', title: 'Derive state safely', category: 'Reactivity', description: 'Computed values express relationships without duplicated state.', code: 'computed block → total() { return this.items.length }' },
+    { number: '09', tag: 'watch', title: 'Observe changes', category: 'Reactivity', description: 'Watchers are useful for persistence and side effects.', code: 'watch: { query(value) { localStorage.q = value } }' },
+    { number: '10', tag: 'props', title: 'Share component data', category: 'UI patterns', description: 'Props define a small, explicit component contract.', code: 'props: { title: { type: "String", required: true } }' },
+    { number: '11', tag: 'slots', title: 'Make content reusable', category: 'UI patterns', description: 'Slots let parents provide markup to a child.', code: '<slot name="footer"></slot>' },
+    { number: '12', tag: 'filters', title: 'Format in templates', category: 'Essentials', description: 'Built-in filters keep display formatting readable.', code: '{{ name | capitalize }}\n{{ price | currency:"USD" }}' },
+    { number: '13', tag: '@class', title: 'Toggle classes', category: 'UI patterns', description: 'The original Teloce API remains available alongside v-bind.', code: '<div @class="{ active: open }"></div>' },
+    { number: '14', tag: '@show', title: 'Toggle visibility', category: 'UI patterns', description: 'Legacy-friendly directives make migration easier.', code: '<aside @show="menuOpen">Menu</aside>' },
+    { number: '15', tag: 'CSS', title: 'Scope styles locally', category: 'Essentials', description: 'Scoped CSS prevents component styles leaking across a page.', code: '&lt;style scoped&gt; .card { padding: 1rem; } &lt;/style&gt;' },
+    { number: '16', tag: 'module', title: 'Use CSS modules', category: 'Production', description: 'Module syntax is available for teams that prefer class maps.', code: '&lt;style module&gt; .button { color: teal; } &lt;/style&gt;' },
+    { number: '17', tag: 'router', title: 'Add client navigation', category: 'Production', description: 'Keep page transitions fast with the Teloce router runtime.', code: 'router.add("/docs", Docs);\nrouter.mount("#app")' },
+    { number: '18', tag: 'Flaxon', title: 'Serve an API route', category: 'Backend', description: 'The backend remains normal, testable Python.', code: '@app.get("/api/health")\nasync def health(): return {"ok": True}' },
+    { number: '19', tag: 'Jinax', title: 'Mount the app in HTML', category: 'Backend', description: 'Jinax templates provide the document shell.', code: '<div id="app"></div>\n<script type="module">mount("#app")</script>' },
+    { number: '20', tag: 'fetch', title: 'Call your backend', category: 'Backend', description: 'Use browser APIs or a small service module for data.', code: 'const response = await fetch("/api/items")' },
+    { number: '21', tag: 'async', title: 'Handle loading states', category: 'Production', description: 'Model loading and failure explicitly for good UX.', code: '<p v-if="loading">Loading...</p>\n<p v-if="error">{{ error }}</p>' },
+    { number: '22', tag: 'a11y', title: 'Build accessible controls', category: 'Production', description: 'Semantic HTML and labels work everywhere.', code: '<button aria-label="Close" @click="close">×</button>' },
+    { number: '23', tag: 'animation', title: 'Animate with CSS', category: 'UI patterns', description: 'CSS stays in the .vel file and ships with the component.', code: '&lt;div class="pulse"&gt;Hello&lt;/div&gt;\n&lt;style scoped&gt;.pulse { animation: pulse 1s infinite; }&lt;/style&gt;' },
+    { number: '24', tag: 'testing', title: 'Test compiled output', category: 'Production', description: 'Compile, syntax-check, then exercise the browser.', code: 'teloce build\nnode --check dist/static/js/App.js\npytest' },
+    { number: '25', tag: 'deploy', title: 'Deploy to Vercel', category: 'Production', description: 'Use a Python build command and expose the Flaxon ASGI app.', code: 'python build.py\npython -m flaxon run app:app' },
+    { number: '26', tag: 'debug', title: 'Diagnose compiler errors', category: 'Production', description: 'Structured diagnostics include file, line, column, and suggestions.', code: 'teloce lint static/js/App.vel\nteloce debug' },
+    { number: '27', tag: 'plugin', title: 'Extend the compiler', category: 'Production', description: 'Plugins can add filters, directives, and lifecycle hooks.', code: 'registry.register_filter("money", money)' },
+    { number: '28', tag: 'HMR', title: 'Iterate without losing state', category: 'Production', description: 'The dev runtime tracks mounted instances for reloads.', code: 'teloce dev\n# edit a .vel file and refresh' },
+    { number: '29', tag: 'security', title: 'Keep output safe', category: 'Production', description: 'Interpolations are escaped by default; opt into HTML deliberately.', code: '{{ userText }}\n<div @html="trustedHtml"></div>' },
+    { number: '30', tag: 'team', title: 'Share a component contract', category: 'Production', description: 'Small files and explicit props make reviews easier.', code: 'components/\n  Button.vel\n  Modal.vel' }
+  ] } },
+  computed: {
+    visibleItems() { return this.items.filter(item => this.matches(item)) }
+  },
+  methods: {
+    selectCategory(category) { this.selected = category },
+    matches(item) { const text = `${item.title} ${item.tag} ${item.description} ${item.code}`.toLowerCase(); return (this.selected === 'Essentials' || this.selected === item.category || (this.selected === 'Reactivity' && ['computed','watch','signals'].includes(item.tag)) || (this.selected === 'UI patterns' && ['event','v-model','props','slots','@class','@show','animation','a11y'].includes(item.tag)) || (this.selected === 'Backend' && ['Flaxon','Jinax','fetch'].includes(item.tag)) || (this.selected === 'Production' && !['Essentials','UI patterns'].includes(item.category))) && text.includes(this.query.toLowerCase()) },
+    visibleCount() { return this.visibleItems.length },
+    copy(value) { if (navigator.clipboard) navigator.clipboard.writeText(value); this.copied = true }
+  }
+}
+</script>
+
+<style scoped>
+:root { color-scheme: dark; } * { box-sizing: border-box; } body { margin: 0; background: #090b11; color: #eceaf4; font: 15px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; } a { color: inherit; text-decoration: none; } button, input { font: inherit; } button { cursor: pointer; }
+.shell { min-height: 100vh; background: radial-gradient(circle at 50% -10%, #29203f 0, #0c0e16 40rem); } .topbar, .hero, .content, .examples, footer { width: min(1180px, calc(100% - 48px)); margin: auto; } .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #292735; } .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -.03em; } .brand small { color: #777287; font-size: 9px; letter-spacing: .16em; margin-left: 7px; } .mark { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #8775a7; border-radius: 9px; color: #d9c4ff; background: #332549; } nav { display: flex; gap: 25px; color: #9b96aa; font-size: 13px; } nav a:hover { color: #fff; }
+.hero { padding: 92px 0 70px; text-align: center; } .eyebrow { color: #ba8cff; font-size: 10px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; } h1 { margin: 15px 0; font-size: clamp(42px, 7vw, 76px); line-height: 1.02; letter-spacing: -.07em; } em { color: #cba5ff; font-style: normal; } .lead { width: min(630px, 100%); margin: 0 auto 30px; color: #9c98ad; font-size: 17px; } .search { display: flex; align-items: center; gap: 12px; width: min(620px, 100%); margin: auto; padding: 8px 14px; border: 1px solid #654a7d; border-radius: 12px; background: #13121e; box-shadow: 0 0 36px #7045a522; } .search span { color: #c49efb; font-size: 25px; } .search input { width: 100%; border: 0; outline: 0; background: transparent; color: white; } kbd { color: #777286; font-size: 11px; white-space: nowrap; } .pills { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 25px; } .pills button, .copy { border: 1px solid #312c3e; border-radius: 99px; padding: 7px 13px; background: #11111a; color: #9c96ae; } .pills .active { border-color: #9b6fd0; color: #e2caff; background: #2c1e40; }
+.content { display: grid; grid-template-columns: 190px 1fr; gap: 55px; } aside { position: sticky; top: 25px; align-self: start; } .side-label { color: #676276; font-size: 10px; letter-spacing: .15em; } aside > a { display: block; padding: 7px 0; color: #898398; font-size: 13px; cursor: pointer; } aside > a.active { color: #d5b6ff; } .build-note { display: grid; gap: 4px; margin-top: 35px; padding: 14px; border: 1px solid #292536; border-radius: 10px; color: #a8a0b8; font-size: 11px; } .build-note span { color: #76d5a6; } .build-note small { color: #6f687b; } .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 22px; border-bottom: 1px solid #282532; } h2 { margin: 0 0 17px; font-size: 30px; letter-spacing: -.05em; } .section-heading > span { color: #716a7e; font-size: 12px; margin-bottom: 20px; } .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } .card { min-width: 0; padding: 20px; border: 1px solid #292536; border-radius: 12px; background: #11111a; transition: transform .2s, border-color .2s; } .card:hover { border-color: #5b4670; transform: translateY(-2px); } .card-top { display: flex; justify-content: space-between; } .number { color: #716879; font: 12px ui-monospace, monospace; } .tag { color: #c39aff; font: 11px ui-monospace, monospace; } h3 { margin: 14px 0 5px; font-size: 17px; } .card p { min-height: 48px; margin: 0 0 13px; color: #918b9e; font-size: 13px; } pre { overflow: auto; margin: 0 0 14px; padding: 12px; border-radius: 8px; background: #0a0b11; color: #bfe6d0; font: 11px/1.6 ui-monospace, monospace; } .copy { border-radius: 7px; color: #a79caf; font-size: 11px; } .empty { color: #a99fb8; } .examples { padding: 120px 0 90px; } .examples h2 { font-size: 45px; } .component-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; } .component-grid > * { display: block; min-height: 50px; padding: 12px; border: 1px solid #292536; border-radius: 8px; color: #91899f; font-size: 11px; } footer { display: flex; justify-content: space-between; padding: 20px 0 35px; border-top: 1px solid #292735; color: #686274; font-size: 11px; }
+@media (max-width: 800px) { .topbar, .hero, .content, .examples, footer { width: min(100% - 28px, 620px); } nav { display: none; } .content { display: block; } aside { position: static; display: flex; gap: 15px; overflow-x: auto; margin-bottom: 35px; } aside .side-label, .build-note { display: none; } aside > a { white-space: nowrap; } .cards { grid-template-columns: 1fr; } .component-grid { grid-template-columns: repeat(2, 1fr); } footer { display: grid; gap: 5px; } }
+</style>

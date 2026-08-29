@@ -12,7 +12,7 @@ from teloce.ast.elements import ElementFactory
 from teloce.css.hashing import HashGenerator
 from teloce.css.modules import CSSModules
 
-from teloce.ast.nodes import ASTNode, ElementNode, TextNode, InterpolationNode, ForNode, IfNode
+from teloce.ast.nodes import ASTNode, ElementNode, TextNode, InterpolationNode, ForNode, IfNode, ComponentNode, SlotNode, FragmentNode
 from teloce.sfc.component import Component
 
 
@@ -43,10 +43,12 @@ const __tokenize = source => {
 };
 const __safeEvaluate = (expression, scope) => {
   const tokens = __tokenize(expression); let cursor = 0;
+  const blocked = new Set(["__proto__", "prototype", "constructor", "caller", "callee", "arguments"]);
+  const safeProperty = property => property != null && !blocked.has(String(property));
   const peek = () => tokens[cursor]; const take = value => { if (!value || peek().value === value) return tokens[cursor++]; return null; };
   const lookup = name => {
     if (name === "true") return true; if (name === "false") return false; if (name === "null") return null; if (name === "undefined") return undefined;
-    const builtins = { Math, Number, String, Boolean, Array, Object, JSON, Date, parseInt, parseFloat, isNaN, window: typeof window === "undefined" ? undefined : window, document: typeof document === "undefined" ? undefined : document };
+    const builtins = { Math, Number, String, Boolean, Array, Object, JSON, Date, parseInt, parseFloat, isNaN };
     if (Object.prototype.hasOwnProperty.call(scope || {}, name)) return scope[name];
     return builtins[name];
   };
@@ -63,8 +65,8 @@ const __safeEvaluate = (expression, scope) => {
   const postfix = () => {
     let value = primary(); let owner = null;
     while (true) {
-      if (take(".") || take("?.")) { owner = value; const property = take(); value = value == null ? undefined : value[property.value]; continue; }
-      if (take("[")) { owner = value; const property = expressionParser(0); take("]"); value = value == null ? undefined : value[property]; continue; }
+      if (take(".") || take("?.")) { owner = value; const property = take(); value = value == null || !safeProperty(property?.value) ? undefined : value[property.value]; continue; }
+      if (take("[")) { owner = value; const property = expressionParser(0); take("]"); value = value == null || !safeProperty(property) ? undefined : value[property]; continue; }
       if (take("(")) { const args = []; while (peek().value !== ")" && peek().type !== "eof") { args.push(expressionParser(0)); if (!take(",")) break; } take(")"); if (typeof value === "function") value = value.apply(owner || scope, args); owner = null; continue; }
       break;
     }
@@ -75,10 +77,121 @@ const __safeEvaluate = (expression, scope) => {
   const expressionParser = minimum => { let left = unary(); while (precedence[peek().value] >= minimum) { const operator = take().value; const right = expressionParser(precedence[operator] + 1); left = apply(operator, left, right); } if (minimum === 0 && take("?")) { const yes = expressionParser(0); take(":"); const no = expressionParser(0); left = left ? yes : no; } return left; };
   return expressionParser(0);
 };
-const __splitEventStatements = source => { const result = []; let start = 0; let depth = 0; let quote = ""; let escaped = false; for (let index = 0; index < String(source).length; index += 1) { const character = String(source)[index]; if (quote) { if (escaped) escaped = false; else if (character === "\\") escaped = true; else if (character === quote) quote = ""; continue; } if (character === "\"" || character === "'") { quote = character; continue; } if ("([{".includes(character)) depth += 1; else if (")]}".includes(character)) depth -= 1; else if (character === "," && depth === 0) { result.push(String(source).slice(start, index).trim()); start = index + 1; } } result.push(String(source).slice(start).trim()); return result.filter(Boolean); };
-const __setSafePath = (expression, value, scope) => { const path = String(expression).trim().split(".").filter(Boolean); if (!path.length) return value; if (path.length === 1) scope[path[0]] = value; else { let target = scope[path[0]]; for (const part of path.slice(1, -1)) target = target?.[part]; if (target != null) target[path[path.length - 1]] = value; } return value; };
+const __splitEventStatements = source => { const result = []; let start = 0; let depth = 0; let quote = ""; let escaped = false; const text = String(source).trim(); for (let index = 0; index < text.length; index += 1) { const character = text[index]; if (quote) { if (escaped) escaped = false; else if (character === "\\") escaped = true; else if (character === quote) quote = ""; continue; } if (character === "\"" || character === "'") { quote = character; continue; } if ("([{".includes(character)) depth += 1; else if (")]}".includes(character)) depth -= 1; else if ((character === "," || character === ";") && depth === 0) { result.push(text.slice(start, index).trim()); start = index + 1; } } result.push(text.slice(start).replace(/^\(|\)$/g, "").trim()); return result.filter(Boolean); };
+const __setSafePath = (expression, value, scope) => { const path = String(expression).trim().split(".").filter(Boolean); const blocked = new Set(["__proto__", "prototype", "constructor", "caller", "callee", "arguments"]); if (!path.length || path.some(part => blocked.has(part))) return undefined; if (path.length === 1) scope[path[0]] = value; else { let target = scope[path[0]]; for (const part of path.slice(1, -1)) target = target?.[part]; if (target != null) target[path[path.length - 1]] = value; } return value; };
 const __runEventExpression = (expression, scope) => { let result; for (const statement of __splitEventStatements(expression)) { const update = statement.match(/^(.+?)\s*(\+\+|--)$/); if (update) { const current = __safeEvaluate(update[1], scope); result = __setSafePath(update[1], Number(current || 0) + (update[2] === "++" ? 1 : -1), scope); continue; } const assignment = statement.match(/^(.+?)\s*(\+=|-=|\*=|\/=|=)\s*(.+)$/); if (assignment) { const current = __safeEvaluate(assignment[1], scope); const next = __safeEvaluate(assignment[3], scope); const value = assignment[2] === "=" ? next : assignment[2] === "+=" ? current + next : assignment[2] === "-=" ? current - next : assignment[2] === "*=" ? current * next : current / next; result = __setSafePath(assignment[1], value, scope); continue; } result = __safeEvaluate(statement, scope); } return result; };
 '''
+
+SHARED_DOM_RUNTIME = r'''
+export const __createReactive = (initial, notify) => {
+  const cache = new WeakMap();
+  const wrap = value => {
+    if (!value || typeof value !== "object") return value;
+    if (cache.has(value)) return cache.get(value);
+    const proxy = new Proxy(value, {
+      get(object, key, receiver) {
+        const result = Reflect.get(object, key, receiver);
+        return result && typeof result === "object" ? wrap(result) : result;
+      },
+      set(object, key, next, receiver) {
+        const changed = !Object.is(object[key], next);
+        const result = Reflect.set(object, key, next, receiver);
+        if (changed) notify();
+        return result;
+      },
+      deleteProperty(object, key) {
+        const existed = Object.prototype.hasOwnProperty.call(object, key);
+        const result = Reflect.deleteProperty(object, key);
+        if (existed) notify();
+        return result;
+      },
+    });
+    cache.set(value, proxy);
+    return proxy;
+  };
+  return wrap(initial);
+};
+
+export const __patch = (target, html) => {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const markManaged = node => {
+    if (!node) return node;
+    node.__teloceManaged = true;
+    if (node.nodeType === 1) {
+      node.__teloceManagedAttributes = new Set(Array.from(node.attributes).map(attribute => attribute.name));
+      for (const child of Array.from(node.childNodes)) markManaged(child);
+    }
+    return node;
+  };
+  const cloneManaged = node => markManaged(node.cloneNode(true));
+  const disposeNode = node => {
+    if (!node) return;
+    node.__teloceInstance?.unmount?.();
+    if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options);
+    for (const child of Array.from(node.childNodes || [])) disposeNode(child);
+  };
+  const patchNode = (oldNode, newNode) => {
+    if (!oldNode || oldNode.nodeType !== newNode.nodeType || (oldNode.nodeType === 1 && oldNode.tagName !== newNode.tagName)) return cloneManaged(newNode);
+    if (oldNode.nodeType === 3) {
+      if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue;
+      return oldNode;
+    }
+    const managedAttributes = oldNode.__teloceManagedAttributes || new Set();
+    for (const attr of Array.from(oldNode.attributes)) if (managedAttributes.has(attr.name) && !newNode.hasAttribute(attr.name)) oldNode.removeAttribute(attr.name);
+    for (const attr of Array.from(newNode.attributes)) if (oldNode.getAttribute(attr.name) !== attr.value) oldNode.setAttribute(attr.name, attr.value);
+    oldNode.__teloceManagedAttributes = new Set(Array.from(newNode.attributes).map(attribute => attribute.name));
+    patchChildren(oldNode, newNode);
+    return oldNode;
+  };
+  const patchChildren = (parent, templateParent) => {
+    const old = Array.from(parent.childNodes);
+    // Mark server-rendered/pre-existing nodes on first hydration so they are
+    // reconciled and disposed exactly like client-created nodes. Without
+    // this, an SSR host containing HTML before mount would receive a second
+    // copy of the component tree.
+    for (const node of old) if (!node.__teloceManaged) markManaged(node);
+    const next = Array.from(templateParent.childNodes);
+    const managed = old.filter(node => node.__teloceManaged);
+    const keyed = new Map(managed.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node]));
+    const used = new Set();
+    let cursor = 0;
+    let anchor = parent.firstChild;
+    next.forEach(newNode => {
+      const key = newNode.nodeType === 1 ? newNode.dataset.teloceKey : null;
+      let oldNode = key && keyed.has(key) ? keyed.get(key) : (key ? null : managed[cursor++]);
+      if (oldNode && used.has(oldNode)) oldNode = null;
+      if (oldNode) used.add(oldNode);
+      const result = oldNode ? patchNode(oldNode, newNode) : cloneManaged(newNode);
+      if (result !== oldNode) {
+        if (oldNode && oldNode.parentNode === parent) { disposeNode(oldNode); parent.replaceChild(result, oldNode); }
+        else parent.insertBefore(result, anchor || null);
+      } else if (result !== anchor) parent.insertBefore(result, anchor || null);
+      anchor = result.nextSibling;
+    });
+    for (const oldNode of managed) if (!used.has(oldNode) && oldNode.parentNode === parent) { disposeNode(oldNode); parent.removeChild(oldNode); }
+  };
+  patchChildren(target, template.content);
+};
+'''
+
+BUILTIN_FILTERS_JS = {
+    "uppercase": 'value => String(value ?? "").toUpperCase()',
+    "lowercase": 'value => String(value ?? "").toLowerCase()',
+    "trim": 'value => String(value ?? "").trim()',
+    "capitalize": 'value => { const text = String(value ?? ""); return text ? text[0].toUpperCase() + text.slice(1) : text; }',
+    "slugify": 'value => String(value ?? "").trim().toLowerCase().replace(/[^\\w\\s-]/g, "").replace(/[\\s_-]+/g, "-").replace(/^-+|-+$/g, "")',
+    "truncate": '(value, length = 30, suffix = "...") => { const text = String(value ?? ""); const size = Number(length); return text.length > size ? text.slice(0, Math.max(0, size - String(suffix).length)) + suffix : text; }',
+    "currency": '(value, currency = "USD") => new Intl.NumberFormat(undefined, { style: "currency", currency: String(currency).toUpperCase() }).format(Number(value) || 0)',
+    "percent": '(value, digits = 0) => `${(Number(value) * 100).toFixed(Number(digits))}%`',
+    "number": '(value, locale) => new Intl.NumberFormat(locale || undefined).format(Number(value) || 0)',
+    "first": 'value => Array.isArray(value) ? value[0] : value',
+    "last": 'value => Array.isArray(value) ? value[value.length - 1] : value',
+    "pluck": '(value, key) => Array.isArray(value) ? value.map(item => item == null ? undefined : item[key]) : value',
+    "orderBy": '(value, key, direction = "asc") => Array.isArray(value) ? [...value].sort((a, b) => { const left = key == null ? a : a?.[key]; const right = key == null ? b : b?.[key]; const result = left < right ? -1 : left > right ? 1 : 0; return String(direction).toLowerCase() === "desc" ? -result : result; }) : value',
+    "json": 'value => JSON.stringify(value)',
+    "join": '(value, separator = ", ") => Array.isArray(value) ? value.join(separator) : value',
+}
 
 
 class Generator:
@@ -93,11 +206,15 @@ class Generator:
         self.indent_level = 0
         self.scope_id = None
         self.module_mapping = {}
+        self._used_components = set()
+        self._used_filters = set()
     
     def generate(self, nodes: List[ASTNode], component: Component) -> str:
         """Generate JavaScript code."""
         self.indent_level = 0
         self.scope_id = HashGenerator().generate_scope_id(component.name) if component.style.scoped else None
+        self._used_components = self._collect_component_tags(nodes)
+        self._used_filters = self._collect_filter_names(nodes)
         all_style_css = "\n".join(style.css for style in getattr(component, "styles", []) or [component.style])
         self.module_mapping = CSSModules.mapping(all_style_css, component.name) if component.style.module else {}
         
@@ -250,6 +367,92 @@ class Generator:
                 parts.append(f'{json.dumps(name)}: ({source})')
         return ", ".join(parts)
 
+    def _generate_builtin_filters(self, component: Component) -> str:
+        """Emit only built-in filters referenced by this component."""
+        return ", ".join(
+            f'{json.dumps(name)}: {implementation}'
+            for name, implementation in BUILTIN_FILTERS_JS.items()
+            if name in self._used_filters
+        )
+
+    @staticmethod
+    def _filter_names_from_expression(expression: Any) -> set:
+        """Find template filter names without scanning script/style text.
+
+        A pipe inside a quoted string or nested expression is data, not a
+        filter separator. This deliberately handles the template expression
+        grammar rather than JavaScript source; full JavaScript parsing belongs
+        to the module parser and is not needed to decide template helpers.
+        """
+        text = str(expression or "")
+        names = set()
+        quote = None
+        escaped = False
+        depth = 0
+        index = 0
+        while index < len(text):
+            char = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                index += 1
+                continue
+            if char in "'\"`":
+                quote = char
+            elif char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth = max(0, depth - 1)
+            elif char == "|" and depth == 0 and (index + 1 >= len(text) or text[index + 1] != "|"):
+                match = re.match(r"\s*([A-Za-z_$][\w$]*)", text[index + 1:])
+                if match:
+                    names.add(match.group(1))
+                    index += len(match.group(0))
+            index += 1
+        return names
+
+    def _collect_filter_names(self, nodes: List[ASTNode]) -> set:
+        """Collect filters used by template AST nodes only."""
+        used = set()
+
+        def visit(items):
+            for node in items or []:
+                if isinstance(node, InterpolationNode):
+                    used.update(self._filter_names_from_expression(node.expression))
+                elif isinstance(node, ElementNode):
+                    for value in (node.attributes or {}).values():
+                        used.update(self._filter_names_from_expression(value))
+                    for binding in node.bindings or []:
+                        used.update(self._filter_names_from_expression(binding.value))
+                    for event in node.events or []:
+                        used.update(self._filter_names_from_expression(event.handler))
+                    visit(node.children)
+                elif isinstance(node, ForNode):
+                    used.update(self._filter_names_from_expression(node.collection))
+                    used.update(self._filter_names_from_expression(node.key))
+                    visit(node.children)
+                elif isinstance(node, IfNode):
+                    used.update(self._filter_names_from_expression(node.condition))
+                    visit(node.children)
+                    visit(node.else_children)
+                elif isinstance(node, ComponentNode):
+                    for value in (node.props or {}).values():
+                        used.update(self._filter_names_from_expression(value))
+                    visit(node.children)
+                    for slot_nodes in (node.slots or {}).values():
+                        visit(slot_nodes)
+                elif isinstance(node, (SlotNode, FragmentNode)):
+                    visit(node.children)
+                elif hasattr(node, "children"):
+                    visit(node.children)
+
+        visit(nodes)
+        return used
+
     def _generate_runtime(
         self,
         component: Component,
@@ -270,8 +473,10 @@ class Generator:
         component_map = ', '.join(f'{json.dumps(name)}: {name}' for name in imports)
         custom_filters = self._generate_js_filters()
         filter_suffix = f", {custom_filters}" if custom_filters else ""
+        shared_runtime_import = self.options.get("shared_runtime_import")
         runtime = [
-            SAFE_EXPRESSION_RUNTIME,
+            *([] if shared_runtime_import else [SAFE_EXPRESSION_RUNTIME]),
+            *([f'import {{ __safeEvaluate, __runEventExpression, __setSafePath, __createReactive, __patch }} from {json.dumps(shared_runtime_import)};'] if shared_runtime_import else []),
             f'const __components = {{{component_map}}};',
             'const __readProps = (element, parentState) => {',
             '  const slots = { default: "" }; for (const child of Array.from(element.childNodes)) { if (child.nodeType === 1 && child.hasAttribute("slot")) { const name = child.getAttribute("slot") || "default"; slots[name] = (slots[name] || "") + child.outerHTML; } else { slots.default += child.outerHTML ?? child.textContent ?? ""; } }',
@@ -280,6 +485,7 @@ class Generator:
             '    if (attribute.name === "data-v-" || attribute.name.startsWith("data-v-") || attribute.name.startsWith("data-teloce-event-")) continue;',
             '    if (attribute.name === "data-teloce-is") { props.__dynamic = __evaluate(attribute.value, parentState); continue; }',
             '    if (attribute.name.startsWith(":")) props[attribute.name.slice(1)] = __evaluate(attribute.value, parentState);',
+            '    else if (attribute.name.startsWith("data-teloce-bind-")) { const name = attribute.name.slice("data-teloce-bind-".length); try { props[name] = JSON.parse(attribute.value); } catch (_) { props[name] = __evaluate(attribute.value, parentState); } }',
             '    else if (!attribute.name.startsWith("data-")) props[attribute.name] = attribute.value;',
             '  }',
             '  return props;',
@@ -293,7 +499,7 @@ class Generator:
             'const __unregisterHmr = record => { const records = __hmrRegistry.get(__moduleUrl); records?.delete(record); if (records?.size === 0) __hmrRegistry.delete(__moduleUrl); };',
             'if (typeof globalThis !== "undefined" && !globalThis.__teloce_hmr_reload) globalThis.__teloce_hmr_reload = async () => { const records = [...__hmrRegistry.values()].flatMap(set => [...set]); for (const record of records) await record.reload(); };',
             f'const __initialData = {data};',
-            'const __normalizeProps = (input) => { const output = { ...input }; for (const [name, definition] of Object.entries(__component.props || {})) { if (output[name] === undefined && definition?.type === "Boolean") output[name] = false; if (output[name] === undefined && definition && definition.default !== null && definition.default !== undefined) { try { output[name] = Function(`return (${definition.default})`)(); } catch (_) {} } if (__dev && definition?.required && output[name] === undefined) console.warn(`Missing required prop: ${name}`); if (__dev && definition?.type && output[name] !== undefined) { const expected = String(definition.type).split("|"); const actual = output[name]?.constructor?.name; if (!expected.includes(actual)) console.warn(`Invalid prop type for ${name}: expected ${definition.type}, got ${actual}`); } if (definition?.validator && output[name] !== undefined) { try { const valid = Function(`return (${definition.validator})`)()(output[name]); if (__dev && !valid) console.warn(`Invalid prop value for ${name}`); } catch (error) { if (__dev) console.warn(`Prop validator failed for ${name}`, error); } } } return output; };',
+            'const __normalizeProps = (input) => { const output = { ...input }; for (const [name, definition] of Object.entries(__component.props || {})) { if (output[name] === undefined && definition?.type === "Boolean") output[name] = false; if (output[name] === undefined && definition && definition.default !== null && definition.default !== undefined) { try { output[name] = __safeEvaluate(String(definition.default), {}); } catch (_) {} } if (__dev && definition?.required && output[name] === undefined) console.warn(`Missing required prop: ${name}`); if (__dev && definition?.type && output[name] !== undefined) { const expected = String(definition.type).split("|"); const actual = output[name]?.constructor?.name; if (!expected.includes(actual)) console.warn(`Invalid prop type for ${name}: expected ${definition.type}, got ${actual}`); } if (definition?.validator && typeof definition.validator === "function" && output[name] !== undefined) { try { const valid = definition.validator(output[name]); if (__dev && !valid) console.warn(`Invalid prop value for ${name}`); } catch (error) { if (__dev) console.warn(`Prop validator failed for ${name}`, error); } } } return output; };',
             'const __installStyle = () => {',
             '  if (!__style || typeof document === "undefined") return;',
             f'  const styleId = "teloce-style-{HashGenerator().generate(component.name, length=9)}";',
@@ -304,19 +510,15 @@ class Generator:
             '  style.textContent = __style;',
             '  (document.head || document.documentElement).appendChild(style);',
             '};',
-            f'const __filters = {{ uppercase: value => String(value ?? "").toUpperCase(), lowercase: value => String(value ?? "").toLowerCase(), trim: value => String(value ?? "").trim(), capitalize: value => {{ const text = String(value ?? ""); return text ? text[0].toUpperCase() + text.slice(1) : text; }}, slugify: value => String(value ?? "").trim().toLowerCase().replace(/[^\\w\\s-]/g, "").replace(/[\\s_-]+/g, "-").replace(/^-+|-+$/g, ""), truncate: (value, length = 30, suffix = "...") => {{ const text = String(value ?? ""); const size = Number(length); return text.length > size ? text.slice(0, Math.max(0, size - String(suffix).length)) + suffix : text; }}, currency: (value, currency = "USD") => new Intl.NumberFormat(undefined, {{ style: "currency", currency: String(currency).toUpperCase() }}).format(Number(value) || 0), percent: (value, digits = 0) => `${{(Number(value) * 100).toFixed(Number(digits))}}%`, number: (value, locale) => new Intl.NumberFormat(locale || undefined).format(Number(value) || 0), first: value => Array.isArray(value) ? value[0] : value, last: value => Array.isArray(value) ? value[value.length - 1] : value, pluck: (value, key) => Array.isArray(value) ? value.map(item => item == null ? undefined : item[key]) : value, orderBy: (value, key, direction = "asc") => Array.isArray(value) ? [...value].sort((a, b) => {{ const left = key == null ? a : a?.[key]; const right = key == null ? b : b?.[key]; const result = left < right ? -1 : left > right ? 1 : 0; return String(direction).toLowerCase() === "desc" ? -result : result; }}) : value, json: value => JSON.stringify(value), join: (value, separator = ", ") => Array.isArray(value) ? value.join(separator) : value{filter_suffix} }};',
+            f'const __filters = {{ {self._generate_builtin_filters(component)}{", " if self._generate_builtin_filters(component) and custom_filters else ""}{custom_filters} }};',
             f'const __dev = {str(bool(self.dev)).lower()};',
-            'const __legacyEvaluate = (expression, scope) => {',
-            '  try { const parts = String(expression).split(/\\s+\\|\\s+/); let value = Function("scope", `with (scope) { return (${parts.shift()}) }`)(scope); for (const filter of parts) { const match = filter.match(/^([\\w$]+)(?:\\((.*)\\)|(?::(.*)))?$/); const argumentsSource = match?.[2] ?? match?.[3]; if (match && __filters[match[1]]) value = __filters[match[1]](value, ...(argumentsSource ? Function(`return [${argumentsSource.replace(/:/g, ",")}]`)() : [])); } return value; }',
-            '  catch (error) { if (__dev) console.error("Teloce expression error:", expression, error); return ""; }',
-            '};',
             'const __evaluate = (expression, scope) => { try { const parts = String(expression).split(/\\s+\\|\\s+/); let value = __safeEvaluate(parts.shift(), scope || {}); for (const filter of parts) { const match = filter.match(/^([\\w$]+)(?:\\((.*)\\)|(?::(.*)))?$/); const argumentsSource = match?.[2] ?? match?.[3]; if (match && __filters[match[1]]) value = __filters[match[1]](value, ...(argumentsSource ? argumentsSource.split(",").map(argument => __safeEvaluate(argument, scope || {})) : [])); } return value; } catch (error) { if (__dev) console.error("Teloce expression error:", expression, error); return ""; } };',
             "const __escapeHtml = (value) => String(value).replace(/[&<>\"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[character]));",
-            'const __legacyAssign = (expression, value, scope) => { try { Function("scope", "value", `with (scope) { ${expression} = value }`)(scope, value); } catch (_) {} };',
             'const __assign = (expression, value, scope) => { try { const path = String(expression).trim().split(".").filter(Boolean); if (!path.length) return; if (path.length === 1) scope[path[0]] = value; else { let target = scope[path[0]]; for (const part of path.slice(1, -1)) target = target?.[part]; if (target != null) target[path[path.length - 1]] = value; } } catch (_) {} };',
             'const __mapClass = value => { const map = token => __styleClasses[token] || token; return Array.isArray(value) ? value.map(map).join(" ") : value && typeof value === "object" ? Object.keys(value).filter(key => value[key]).map(map).join(" ") : typeof value === "string" ? value.split(/\\s+/).filter(Boolean).map(map).join(" ") : value; };',
             'const __pluginDirectives = typeof globalThis !== "undefined" ? (globalThis.teloce?.directives || {}) : {};',
-            'const __applyBinding = (element, name, value) => { if (name === "class") { element.className = __mapClass(value) ?? ""; } else if (name === "style" && value && typeof value === "object") { for (const [key, item] of Object.entries(value)) element.style[key] = item ?? ""; } else if (name === "show" || name === "hide") { element.hidden = name === "show" ? !Boolean(value) : Boolean(value); } else if (name === "html") { element.innerHTML = value == null ? "" : String(value); } else if (name === "text") { element.textContent = value == null ? "" : String(value); } else if (["disabled", "checked", "selected", "readonly", "required", "multiple"].includes(name)) { element.toggleAttribute(name, Boolean(value)); } else if (value === false || value == null) element.removeAttribute(name); else element.setAttribute(name, String(value)); };',
+            'const __sanitizeHtml = value => { const template = document.createElement("template"); template.innerHTML = String(value ?? ""); template.content.querySelectorAll("script,iframe,object,embed,link,meta,base").forEach(node => node.remove()); template.content.querySelectorAll("*").forEach(node => { for (const attribute of Array.from(node.attributes)) { const name = attribute.name.toLowerCase(); const text = attribute.value.trim().toLowerCase(); if (name.startsWith("on") || ((name === "href" || name === "src" || name === "action" || name === "formaction") && /^(?:javascript|vbscript|data):/.test(text))) node.removeAttribute(attribute.name); } }); return template.innerHTML; };',
+            'const __applyBinding = (element, name, value) => { if (name === "class") { element.className = __mapClass(value) ?? ""; } else if (name === "style" && value && typeof value === "object") { for (const [key, item] of Object.entries(value)) element.style[key] = item ?? ""; } else if (name === "show" || name === "hide") { element.hidden = name === "show" ? !Boolean(value) : Boolean(value); } else if (name === "html") { element.innerHTML = __sanitizeHtml(value); } else if (name === "text") { element.textContent = value == null ? "" : String(value); } else if (["disabled", "checked", "selected", "readonly", "required", "multiple"].includes(name)) { element.toggleAttribute(name, Boolean(value)); } else if (value === false || value == null) element.removeAttribute(name); else element.setAttribute(name, String(value)); };',
             'const __patch = (target, html) => {',
             '  const template = document.createElement("template"); template.innerHTML = html;',
             '  const markManaged = node => { if (!node) return node; node.__teloceManaged = true; if (node.nodeType === 1) { node.__teloceManagedAttributes = new Set(Array.from(node.attributes).map(attribute => attribute.name)); for (const child of Array.from(node.childNodes)) markManaged(child); } return node; };',
@@ -331,14 +533,16 @@ class Generator:
             '    patchChildren(oldNode, newNode); return oldNode;',
             '  };',
             '  const patchChildren = (parent, templateParent) => {',
-            '    const old = Array.from(parent.childNodes); const next = Array.from(templateParent.childNodes); const managed = old.filter(node => node.__teloceManaged); const keyed = new Map(managed.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node])); const used = new Set(); let cursor = 0; let anchor = parent.firstChild;',
+            '    const old = Array.from(parent.childNodes); for (const node of old) if (!node.__teloceManaged) markManaged(node); const next = Array.from(templateParent.childNodes); const managed = old.filter(node => node.__teloceManaged); const keyed = new Map(managed.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node])); const used = new Set(); let cursor = 0; let anchor = parent.firstChild;',
             '    next.forEach(newNode => { const key = newNode.nodeType === 1 ? newNode.dataset.teloceKey : null; let oldNode = key && keyed.has(key) ? keyed.get(key) : (key ? null : managed[cursor++]); if (oldNode && used.has(oldNode)) oldNode = null; if (oldNode) used.add(oldNode); const result = oldNode ? patchNode(oldNode, newNode) : cloneManaged(newNode); if (result !== oldNode) { if (oldNode && oldNode.parentNode === parent) { disposeNode(oldNode); parent.replaceChild(result, oldNode); } else parent.insertBefore(result, anchor || null); } else if (result !== anchor) parent.insertBefore(result, anchor || null); anchor = result.nextSibling; });',
             '    for (const oldNode of managed) if (!used.has(oldNode) && oldNode.parentNode === parent) { disposeNode(oldNode); parent.removeChild(oldNode); }',
             '  };',
             '  patchChildren(target, template.content);',
             '};',
             'const __renderTemplate = (source, state) => {',
-            '  let output = source;',
+            '  // Templates are data, never callbacks. Accept a render function only for',
+            '  // explicit advanced integrations and always normalize the result to text.',
+            '  let output = typeof source === "function" ? source(state) : source == null ? "" : String(source);',
             '  output = output.replace(/<if\\s+(?:condition|test)="([^"]*)">([\\s\\S]*?)(?:<else>([\\s\\S]*?))?<\\/if>/g, (_, test, yes, no) => __evaluate(test, state) ? yes : (no || ""));',
             '  output = output.replace(/<slot(?:\\s+name="([^"]*)")?\\s*><\\/slot>/g, (_, name) => (state.__slots || {})[name || "default"] || "");',
             '  const __renderLoops = (source, state) => {',
@@ -347,7 +551,7 @@ class Generator:
             '      const openEnd = source.indexOf(">", cursor); if (openEnd < 0) break;',
             '      const opening = source.slice(cursor, openEnd + 1); const itemMatch = opening.match(/item="([^"]*)"/); const collectionMatch = opening.match(/(?:in|collection)="([^"]*)"/); if (!itemMatch || !collectionMatch) break;',
             '      let depth = 1; let scan = openEnd + 1; let closeStart = -1; while (depth && scan < source.length) { const nextOpen = source.indexOf("<for ", scan); const nextClose = source.indexOf("</for>", scan); if (nextClose < 0) break; if (nextOpen >= 0 && nextOpen < nextClose) { depth++; scan = nextOpen + 5; } else { depth--; closeStart = nextClose; scan = nextClose + 6; } } if (depth || closeStart < 0) break;',
-            '      const body = source.slice(openEnd + 1, closeStart); const values = __evaluate(collectionMatch[1], state) || []; const rendered = Array.from(values).map((value, index) => { const loopScope = { ...state, [itemMatch[1]]: value, index }; const nested = __renderLoops(body, loopScope); return nested.replace(/data-teloce-bind-([\\w-]+)="([^"]*)"/g, (_, name, expression) => { const decoded = expression.replace(/&#x27;/g, "\\\'").replace(/&quot;/g, "\\\"").replace(/&amp;/g, "&"); const result = __evaluate(decoded, loopScope); const serialized = result && typeof result === "object" ? JSON.stringify(result) : String(result ?? ""); return `data-teloce-bind-${name}="${serialized.replace(/\\"/g, "&quot;")}"`; }).replace(/<if\\s+[^>]*?(?:condition|test)="([^"]*)"[^>]*>([\\s\\S]*?)(?:<else>([\\s\\S]*?))?<\\/if>/g, (_, test, yes, no) => __evaluate(test, loopScope) ? yes : (no || "")).replace(/{{\\s*([^{}]+?)\\s*}}/g, (_, expression) => { const result = __evaluate(expression, loopScope); return result == null ? "" : __escapeHtml(String(result)); }); }).join("");',
+            '      const body = source.slice(openEnd + 1, closeStart); const values = __evaluate(collectionMatch[1], state) || []; const rendered = Array.from(values).map((value, index) => { const loopScope = { ...state, [itemMatch[1]]: value, index }; const nested = __renderLoops(body, loopScope); return nested.replace(/data-teloce-bind-([\\w-]+)="([^"]*)"/g, (_, name, expression) => { const decoded = expression.replace(/&#x27;/g, "\\\'").replace(/&quot;/g, "\\\"").replace(/&amp;/g, "&"); const result = __evaluate(decoded, loopScope); const serialized = result && typeof result === "object" ? JSON.stringify(result) : String(result ?? ""); return `data-teloce-bind-${name}="${serialized.replace(/\\"/g, "&quot;")}"`; }).replace(/<if\\s+[^>]*?(?:condition|test)="([^"]*)"[^>]*>([\\s\\S]*?)(?:<else>([\\s\\S]*?))?<\\/if>/g, (_, test, yes, no) => __evaluate(test, loopScope) ? yes : (no || "")).replace(/<([A-Za-z][\\w:-]*)([^>]*?)@([\\w.-]+)="([^"]*)"([^>]*)>/g, (_, tag, before, name, expression, after) => { const encoded = JSON.stringify({ [itemMatch[1]]: value, index }).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); return `<${tag}${before}data-teloce-event-${name}="${expression}" data-teloce-loop-scope="${encoded}"${after}>`; }).replace(/{{\\s*([^{}]+?)\\s*}}/g, (_, expression) => { const result = __evaluate(expression, loopScope); return result == null ? "" : __escapeHtml(String(result)); }); }).join("");',
             '      source = source.slice(0, cursor) + rendered + source.slice(closeStart + 6); cursor = source.indexOf("<for ");',
             '    } return source;',
             '  };',
@@ -365,7 +569,9 @@ class Generator:
             '  const requestUpdate = () => { if (rendering || updateScheduled) { updateQueued = true; return; } updateScheduled = true; queueMicrotask(() => { updateScheduled = false; rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; requestUpdate(); } } }); };',
             '  let mounted = false;',
             '  let previous = {};',
-            '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { set(object, key, value) { object[key] = value; requestUpdate(); return true; } });',
+            '  const __reactiveCache = new WeakMap();',
+            '  const __reactive = (value, notify) => { if (!value || typeof value !== "object") return value; const cached = __reactiveCache.get(value); if (cached) return cached; const proxy = new Proxy(value, { get(object, key, receiver) { const result = Reflect.get(object, key, receiver); return result && typeof result === "object" ? __reactive(result, notify) : result; }, set(object, key, next, receiver) { const changed = !Object.is(object[key], next); const result = Reflect.set(object, key, next, receiver); if (changed) notify(); return result; }, deleteProperty(object, key) { const existed = Object.prototype.hasOwnProperty.call(object, key); const result = Reflect.deleteProperty(object, key); if (existed) notify(); return result; } }); __reactiveCache.set(value, proxy); return proxy; };',
+            '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
             '  state.$style = __styleClasses;',
             '  for (const [name, getter] of Object.entries(__component.computed || {})) Object.defineProperty(state, name, { enumerable: true, get: () => getter.call(state) });',
             '  const methods = __component.methods || {};',
@@ -385,7 +591,7 @@ class Generator:
             '        const actualEvent = nativeEvents.has(eventName) ? eventName : `teloce:${eventName}`;',
             '        if (!element.__teloceHandlers) element.__teloceHandlers = new Map();',
             '        const previousHandler = element.__teloceHandlers.get(attribute.name); const signature = eventKey + "=" + handlerName;',
-            '        if (!previousHandler || previousHandler.signature !== signature) { if (previousHandler) element.removeEventListener(previousHandler.actualEvent, previousHandler.listener, previousHandler.options); const listener = event => { if (modifiers.includes("self") && event.target !== element) return; if (modifiers.includes("enter") && event.key !== "Enter") return; if (modifiers.includes("esc") && event.key !== "Escape") return; if (modifiers.includes("ctrl") && !event.ctrlKey) return; if (modifiers.includes("shift") && !event.shiftKey) return; if (modifiers.includes("alt") && !event.altKey) return; if (modifiers.includes("meta") && !event.metaKey) return; if (modifiers.includes("right") && event.button !== 2) return; if (modifiers.includes("middle") && event.button !== 1) return; if (modifiers.includes("left") && event.button !== 0) return; if (modifiers.includes("prevent")) event.preventDefault(); if (modifiers.includes("stop")) event.stopPropagation(); const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __evaluate(handlerName, { ...state, event, $event: event }); }; const options = { once: modifiers.includes("once"), capture: modifiers.includes("capture"), passive: modifiers.includes("passive") }; element.__teloceHandlers.set(attribute.name, { signature, actualEvent, listener, options }); element.addEventListener(actualEvent, listener, options); }',
+            '        if (!previousHandler || previousHandler.signature !== signature) { if (previousHandler) element.removeEventListener(previousHandler.actualEvent, previousHandler.listener, previousHandler.options); const listener = event => { if (modifiers.includes("self") && event.target !== element) return; if (modifiers.includes("enter") && event.key !== "Enter") return; if (modifiers.includes("esc") && event.key !== "Escape") return; if (modifiers.includes("ctrl") && !event.ctrlKey) return; if (modifiers.includes("shift") && !event.shiftKey) return; if (modifiers.includes("alt") && !event.altKey) return; if (modifiers.includes("meta") && !event.metaKey) return; if (modifiers.includes("right") && event.button !== 2) return; if (modifiers.includes("middle") && event.button !== 1) return; if (modifiers.includes("left") && event.button !== 0) return; if (modifiers.includes("prevent")) event.preventDefault(); if (modifiers.includes("stop")) event.stopPropagation(); const eventScope = { ...state }; try { Object.assign(eventScope, JSON.parse(element.getAttribute("data-teloce-loop-scope") || "{}")); } catch (_) {} const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __evaluate(handlerName, { ...eventScope, event, $event: event }); }; const options = { once: modifiers.includes("once"), capture: modifiers.includes("capture"), passive: modifiers.includes("passive") }; element.__teloceHandlers.set(attribute.name, { signature, actualEvent, listener, options }); element.addEventListener(actualEvent, listener, options); }',
             '      }',
             '      const model = element.getAttribute("data-teloce-model");',
             '      if (model) { const current = __evaluate(model, state); if (element.type === "checkbox") element.checked = Boolean(current); else if (element.value !== String(current ?? "")) element.value = current ?? ""; if (!element.__teloceModel) { element.__teloceModel = true; const eventName = element.type === "checkbox" || element.tagName === "SELECT" ? "change" : "input"; element.addEventListener(eventName, event => __assign(model, element.type === "checkbox" ? element.checked : element.value, state)); } }',
@@ -418,6 +624,19 @@ class Generator:
             'export const createApp = mount;',
             '__component.mount = mount;',
         ]
+        # Generated template evaluation is always the constrained evaluator.
+        # There is no dynamic-code escape hatch in generated output.
+        if shared_runtime_import:
+            patch_start = next((index for index, line in enumerate(runtime) if line.startswith('const __patch = ')), None)
+            if patch_start is not None:
+                patch_end = next((index for index in range(patch_start + 1, len(runtime)) if runtime[index] == '};'), None)
+                if patch_end is not None:
+                    del runtime[patch_start:patch_end + 1]
+            runtime = [line for line in runtime if not line.startswith('  const __reactive = ')]
+            runtime = [line.replace(
+                'const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
+                'const state = __createReactive(Object.assign({}, __initialData, __normalizeProps(props)), requestUpdate);',
+            ) for line in runtime]
         return [
             line
             .replace("else __evaluate(handlerName", "else __runEventExpression(handlerName")
@@ -435,11 +654,11 @@ class Generator:
         """Return local component names and their generated import paths."""
         configured = self.options.get("component_imports", {})
         imports = {}
-        pattern = r'import\s+([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+[\'\"]([^\'\"]+\.vel)[\'\"]'
+        pattern = r'(?m)^\s*import\s+([A-Za-z_$][\w$]*)(?:\s*,\s*\{[^}]*\})?\s+from\s+[\'\"]([^\'\"]+\.vel)[\'\"]\s*;?'
         for match in re.finditer(pattern, component.script.raw):
             name, source = match.groups()
             imports[name] = configured.get(name, source[:-4] + ".js")
-        named_pattern = r'import\s*\{([^}]+)\}\s*from\s+[\'\"]([^\'\"]+\.vel)[\'\"]'
+        named_pattern = r'(?m)^\s*import\s*\{([^}]+)\}\s*from\s+[\'\"]([^\'\"]+\.vel)[\'\"]\s*;?'
         for match in re.finditer(named_pattern, component.script.raw):
             source = match.group(2)
             for item in match.group(1).split(','):
@@ -452,7 +671,9 @@ class Generator:
     def _generate_component_imports(self, component: Component) -> List[str]:
         """Emit browser imports for local `.vel` component dependencies."""
         configured = self.options.get("component_imports", {})
+        lazy_components = set(self.options.get("lazy_components", ()) or ())
         lines = []
+        lazy_lines = []
         emitted = set()
         for item in getattr(component.script, "imports", []):
             source = item.source
@@ -462,7 +683,12 @@ class Generator:
             path = configured.get(local, source[:-4] + ".js")
             if not local or (local, path, item.is_default, item.is_namespace) in emitted:
                 continue
+            if self.options.get("tree_shake", False) and item.is_default and local not in self._used_components:
+                continue
             emitted.add((local, path, item.is_default, item.is_namespace))
+            if local in lazy_components and item.is_default:
+                lazy_lines.append(f'const {local} = __teloceLazy(() => import({json.dumps(path)}));')
+                continue
             if item.is_namespace:
                 lines.append(f'import * as {local} from {json.dumps(path)};')
             elif item.is_default:
@@ -473,12 +699,38 @@ class Generator:
                 lines.append(f'import {{ {binding} }} from {json.dumps(path)};')
         # Keep compatibility with manually constructed Component objects that
         # do not carry ScriptImport metadata.
-        if not lines:
-            lines.extend(
-                f'import {name} from {json.dumps(path)};'
-                for name, path in self._component_imports(component).items()
-            )
+        if not lines and not lazy_lines:
+            for name, path in self._component_imports(component).items():
+                if self.options.get("tree_shake", False) and name not in self._used_components:
+                    continue
+                if name in lazy_components:
+                    lazy_lines.append(f'const {name} = __teloceLazy(() => import({json.dumps(path)}));')
+                else:
+                    lines.append(f'import {name} from {json.dumps(path)};')
+        if lazy_lines:
+            helper = ('const __teloceLazy = loader => { let loading; let loaded; return { mount(target, props = {}) { const instance = { updateProps(next) { loaded?.updateProps?.(next); }, unmount() { loaded?.unmount?.(); target.replaceChildren(); } }; loading ||= loader().then(module => { const component = module.default || module; if (component?.mount) loaded = component.mount(target, props); return loaded; }); target.setAttribute("data-teloce-loading", "true"); loading.then(() => target.removeAttribute("data-teloce-loading")); return instance; } }; };')
+            lines.append(helper)
+            lines.extend(lazy_lines)
         return lines
+
+    def _collect_component_tags(self, nodes: List[ASTNode]) -> set[str]:
+        """Collect custom element names referenced by the template AST."""
+        names: set[str] = set()
+        def visit(node: ASTNode) -> None:
+            if isinstance(node, ElementNode):
+                if node.tag and (node.tag[0].isupper() or "-" in node.tag):
+                    names.add(node.tag)
+                for child in node.children:
+                    visit(child)
+            elif isinstance(node, (ForNode, IfNode, ComponentNode, SlotNode, FragmentNode)):
+                for child in getattr(node, "children", []):
+                    visit(child)
+                if isinstance(node, IfNode):
+                    for child in node.else_children:
+                        visit(child)
+        for node in nodes:
+            visit(node)
+        return names
     
     def _generate_template(self, nodes: List[ASTNode]) -> str:
         """Generate template code from AST nodes."""

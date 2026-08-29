@@ -11,6 +11,12 @@ from teloce.javascript.exports import ExportGenerator
 from teloce.javascript.dom import DOMGenerator
 from teloce.javascript.helpers import HelperGenerator
 
+from teloce.javascript.parser import (
+    JSNode, JSProgram, JSToken, JavaScriptLexer, JavaScriptParser,
+    JavaScriptSyntaxError, JavaScriptLanguageParser, parse_javascript,
+    parse_javascript_language, tokenize_javascript,
+)
+
 __all__ = [
     "JavaScriptGenerator",
     "ModuleGenerator",
@@ -18,4 +24,14 @@ __all__ = [
     "ExportGenerator",
     "DOMGenerator",
     "HelperGenerator",
+    "JSToken",
+    "JSNode",
+    "JSProgram",
+    "JavaScriptLexer",
+    "JavaScriptParser",
+    "JavaScriptSyntaxError",
+    "JavaScriptLanguageParser",
+    "parse_javascript",
+    "parse_javascript_language",
+    "tokenize_javascript",
 ]

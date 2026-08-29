@@ -41,6 +41,9 @@ class ManifestGenerator:
             'dependencies': build_result.get('dependencies', {}),
             'dependency_cycle': build_result.get('dependency_cycle'),
             'errors': build_result.get('errors', []),
+            'mode': build_result.get('mode', 'production'),
+            'total_bytes': build_result.get('total_bytes', 0),
+            'size_warnings': build_result.get('size_warnings', []),
         }
         
         for file_info in build_result.get('files', []):
@@ -48,6 +51,7 @@ class ManifestGenerator:
                 'input': file_info.get('input'),
                 'output': file_info.get('output'),
                 'size': file_info.get('size'),
+                'source_hash': file_info.get('source_hash'),
             }
             
             # Add hash if file exists

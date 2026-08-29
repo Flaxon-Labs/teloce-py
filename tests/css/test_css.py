@@ -88,3 +88,37 @@ class TestCSS:
         assert ".reset {" in result
         assert ".host[data-v-scope] .child" in result
         assert "[data-v-scope] > .item" in result
+
+    def test_scoper_preserves_nested_selector_commas(self):
+        scoper = CSSScoper()
+        result = scoper.scope(
+            ':is(.card, .panel), [data-label="a,b"] { color: red; }',
+            "data-v-scope",
+        )
+        assert ".card" in result and ".panel" in result
+        assert '[data-label="a,b"]' in result
+
+    def test_parser_and_scoper_preserve_declaration_at_rules(self):
+        source = '@font-face { font-family: Demo; src: url("demo.woff2"); }'
+        stylesheet = CSSParser().parse(source)
+        assert stylesheet.at_rules[0].declarations[0].property == 'font-family'
+        result = CSSScoper().scope(source, 'data-v-scope')
+        assert '@font-face' in result
+        assert 'src: url("demo.woff2")' in result
+
+    def test_scoper_preserves_nested_at_rules(self):
+        result = CSSScoper().scope(
+            '@media (min-width: 600px) { @supports (display: grid) { .card { display: grid; } } }',
+            'data-v-scope',
+        )
+        assert '@media' in result and '@supports' in result
+        assert '.card[data-v-scope]' in result
+
+    def test_scoper_does_not_scope_keyframes(self):
+        result = CSSScoper().scope(
+            '@keyframes pulse { from { opacity: 0; } to { opacity: 1; } }',
+            'data-v-scope',
+        )
+        assert '@keyframes pulse' in result
+        assert 'from { opacity: 0' in result
+        assert 'from[data-v-scope]' not in result

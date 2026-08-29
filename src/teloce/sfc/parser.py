@@ -156,7 +156,15 @@ class SFCParser:
         results: List[Dict[str, Any]] = []
         cursor = 0
         while True:
-            opening = next((match for match in token.finditer(source, cursor) if not match.group("close")), None)
+            opening = next(
+                (
+                    match
+                    for match in token.finditer(source, cursor)
+                    if not match.group("close")
+                    and not self._inside_opaque_section(source, match.start(), tag)
+                ),
+                None,
+            )
             if opening is None:
                 break
             open_end = self._tag_end(source, opening.start())
@@ -228,6 +236,20 @@ class SFCParser:
                 index += 1
             index += 1
         return bool(quote or line_comment or block_comment)
+
+    @staticmethod
+    def _inside_opaque_section(source: str, position: int, target: str) -> bool:
+        """Ignore SFC-looking tags embedded in another section.
+
+        A documentation string or template literal can contain text such as
+        ``<template>``. Section discovery must not mistake that text for a
+        second top-level SFC block. Script/style bodies are opaque while a
+        different section is being located.
+        """
+        if target.lower() in {"script", "style"}:
+            return False
+        pattern = re.compile(r"<(?P<tag>script|style)\b[^>]*>[\s\S]*?</(?P=tag)\s*>", re.IGNORECASE)
+        return any(match.start() < position < match.end() for match in pattern.finditer(source))
 
     @staticmethod
     def _tag_end(source: str, start: int) -> int:

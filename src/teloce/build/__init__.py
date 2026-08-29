@@ -9,6 +9,7 @@ from teloce.build.writer import FileWriter
 from teloce.build.manifest import ManifestGenerator
 from teloce.build.assets import AssetManager
 from teloce.build.bundler import ModuleBundler, BundleError
+from teloce.build.esbuild import EsbuildBundler, EsbuildUnavailable
 
 
 def build_project(root_dir, out_dir=None, options=None):
@@ -33,5 +34,7 @@ __all__ = [
     "AssetManager",
     "ModuleBundler",
     "BundleError",
+    "EsbuildBundler",
+    "EsbuildUnavailable",
     "build_project",
 ]

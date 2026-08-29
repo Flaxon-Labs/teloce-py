@@ -29,6 +29,16 @@ class _Handler(SimpleHTTPRequestHandler):
                 return
             self._serve_events()
             return
+        # Browsers probe this automatically during dump/smoke tests. Return a
+        # deliberate empty response instead of routing a missing asset through
+        # the file handler, which can leave headless Chromium waiting on a
+        # second error request while the page is otherwise quiescent.
+        if request_path == "/favicon.ico":
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            return
         if request_path == "/":
             self.path = "/index.html"
         if urlsplit(self.path).path.endswith(".html"):
@@ -80,6 +90,8 @@ class _Handler(SimpleHTTPRequestHandler):
             self.send_response(error.code)
             self.end_headers()
             self.wfile.write(error.read())
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
         except URLError as error:
             self.send_error(502, f"Backend proxy failed: {error.reason}")
 
@@ -102,7 +114,7 @@ class _Handler(SimpleHTTPRequestHandler):
                     payload = b": keepalive\n\n"
                 self.wfile.write(payload)
                 self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
         finally:
             self.server.unsubscribe(subscriber)

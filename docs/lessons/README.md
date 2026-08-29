@@ -26,6 +26,13 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 20. [Build a Flaxon notebook with the standalone runtime](20-flaxon-runtime-notebook.md)
 21. [Runtime file reference and router guide](21-runtime-files-and-router.md)
 22. [Build a working Vel IDE with `.vel` and Flask](22-build-a-vel-ide.md)
+23. [Production architecture, SSR, security, and release verification](23-production-architecture.md)
+24. [Optimized Teloce project structure](file-structure.md)
+25. [Fast Dev-Facts](fast-dev-facts.md)
+26. [Build a real CRUD API application](26-crud-api.md)
+27. [Production debugging workflow](27-production-debugging.md)
+24. [Build a real CRUD API application](26-crud-api.md)
+25. [Production debugging workflow](27-production-debugging.md)
 
 ## What you can build
 

@@ -1,0 +1,29 @@
+<template>
+  <article class="card">
+    <img :src="photo.image" :alt="photo.title" loading="lazy" />
+    <div class="card-body">
+      <div><span class="category">{{ photo.category }}</span><h2>{{ photo.title }}</h2></div>
+      <button class="like" @click="like" :aria-label="'Like ' + photo.title">♥ {{ photo.likes }}</button>
+    </div>
+  </article>
+</template>
+
+<script>
+export default {
+  props: { photo: { required: true } },
+  methods: {
+    async like() {
+      const result = await fetch(`/api/photos/${this.photo.id}/like`, { method: "POST" }).then(r => r.json());
+      this.photo.likes = result.likes;
+    }
+  }
+};
+</script>
+
+<style scoped>
+.card { overflow: hidden; border: 1px solid #e4e8ef; border-radius: 1rem; background: #fff; box-shadow: 0 12px 30px #18253a12; }
+img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e9eef5; }
+.card-body { display: flex; align-items: start; justify-content: space-between; gap: .75rem; padding: 1rem; }
+h2 { margin: .25rem 0 0; font-size: 1.05rem; } .category { color: #64748b; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+.like { border: 0; border-radius: .6rem; padding: .45rem .6rem; background: #fff0f2; color: #d34b69; cursor: pointer; white-space: nowrap; }
+</style>

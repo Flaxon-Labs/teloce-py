@@ -1,0 +1,50 @@
+<template>
+  <main class="gallery-shell">
+    <header class="hero">
+      <p class="eyebrow">Teloce-Py gallery</p>
+      <h1>Collect the useful web.</h1>
+      <p class="lede">A multi-file `.vel` application compiled from an editable checkout.</p>
+    </header>
+    <section class="toolbar" aria-label="Gallery filters">
+      <input v-model="query" @input="load" placeholder="Search images" aria-label="Search images" />
+      <select v-model="category" @change="load" aria-label="Filter category">
+        <option>All</option><option>Nature</option><option>Urban</option><option>Travel</option><option>Design</option>
+      </select>
+    </section>
+    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="!loading && photos.length === 0" class="empty">No images match this filter.</p>
+    <section v-else class="grid" aria-live="polite">
+      <GalleryCard v-for="photo in photos" :key="photo.id" :photo="photo" />
+    </section>
+  </main>
+</template>
+
+<script>
+import GalleryCard from "../components/GalleryCard.vel";
+
+export default {
+  components: { GalleryCard },
+  data() { return { photos: [], query: "", category: "All", loading: false, error: "" }; },
+  mounted() { this.load(); },
+  methods: {
+    async load() {
+      this.loading = true;
+      this.error = "";
+      try {
+        const params = new URLSearchParams({ q: this.query, category: this.category });
+        this.photos = (await fetch(`/api/photos?${params}`).then(r => r.json())).photos;
+      } catch (error) { this.error = "Gallery API unavailable"; }
+      this.loading = false;
+    }
+  }
+};
+</script>
+
+<style scoped>
+* { box-sizing: border-box; } .gallery-shell { min-height: 100vh; padding: clamp(1.5rem, 5vw, 5rem) max(1rem, calc((100% - 72rem) / 2)); color: #172033; background: #f6f8fb; font: 1rem system-ui, sans-serif; }
+.hero { max-width: 42rem; margin-bottom: 2rem; } .eyebrow { color: #6c63c7; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+h1 { margin: .5rem 0; font-size: clamp(2.3rem, 7vw, 4.8rem); letter-spacing: -.07em; line-height: .98; } .lede { color: #667085; font-size: 1.1rem; }
+.toolbar { display: flex; gap: .75rem; margin-bottom: 1.5rem; } input, select { border: 1px solid #d7dee9; border-radius: .7rem; padding: .8rem 1rem; background: #fff; color: inherit; font: inherit; } input { flex: 1; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } .error { color: #b42318; } .empty { padding: 3rem 0; color: #667085; }
+@media (max-width: 52rem) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 30rem) { .toolbar { flex-direction: column; } .grid { grid-template-columns: 1fr; } }
+</style>

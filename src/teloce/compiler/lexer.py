@@ -235,6 +235,11 @@ class Lexer:
         if self.current_char() == '/':
             self.tokens.append(Token(TokenType.SELF_CLOSE_TAG, '/', self.line, self.column))
             self.advance()
+        elif tag_name.lower() in self.VOID_ELEMENTS:
+            # HTML void elements are self-closing even when written as
+            # ``<input>`` or ``<br>``. Treating them as ordinary containers
+            # corrupts the AST and causes misleading mismatched-tag errors.
+            self.tokens.append(Token(TokenType.SELF_CLOSE_TAG, '/', self.line, self.column))
         
         self._skip_until('>')
         self.advance()  # Skip '>'
@@ -513,3 +518,7 @@ class Lexer:
     @property
     def has_errors(self) -> bool:
         return len(self.errors) > 0
+    VOID_ELEMENTS = {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    }

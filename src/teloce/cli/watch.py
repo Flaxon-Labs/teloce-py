@@ -52,7 +52,7 @@ def watch_command(args: Any) -> int:
     
     # Build initially
     print("📦 Building project...")
-    builder = Builder({'dev': True, 'source_maps': True})
+    builder = Builder({'dev': True, 'source_maps': True, 'incremental': True, 'clean': False})
     builder.build(discovery.root_dir, output_dir)
     server = start_dev_server(host, port, output_dir, proxy_target=getattr(args, 'proxy', None), hmr=hmr)
     print("✅ Initial build complete")

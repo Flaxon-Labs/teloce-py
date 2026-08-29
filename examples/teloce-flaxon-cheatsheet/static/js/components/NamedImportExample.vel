@@ -1,0 +1,9 @@
+<template>
+  <div class="mini"><span class="mini-dot">●</span><b>named import</b><small>.vel example</small></div>
+</template>
+
+<style scoped>
+.mini { display: flex; align-items: center; gap: 7px; min-height: 26px; }
+.mini-dot { color: #b48be9; font-size: 10px; }
+.mini small { display: block; color: #625b6d; font-size: 9px; }
+</style>

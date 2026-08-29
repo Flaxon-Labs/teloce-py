@@ -1,7 +1,9 @@
 """Real browser coverage for npm/CDN-style standalone Teloce usage."""
 
 import shutil
+import os
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -18,6 +20,13 @@ def _stable_chrome_run(command, *args, **kwargs):
     command = list(command)
     if "--headless=new" not in command:
         return _subprocess_run(command, *args, **kwargs)
+    if "--dump-dom" in command:
+        # dump-dom waits for a page to become quiescent. HMR's intentional
+        # long-lived SSE/WebSocket connection prevents that, so disable HMR
+        # for dump-only probes unless the caller already did so.
+        for index, argument in enumerate(command):
+            if str(argument).startswith("http") and "no_hmr=" not in str(argument):
+                command[index] = f"{argument}{'&' if '?' in str(argument) else '?'}no_hmr=1"
     for flag in (
         "--disable-software-rasterizer",
         "--disable-extensions",
@@ -31,11 +40,30 @@ def _stable_chrome_run(command, *args, **kwargs):
             command.insert(1, flag)
     kwargs["timeout"] = min(kwargs.get("timeout", 60), 30)
     failure = None
-    for _attempt in range(2):
-        try:
-            return _subprocess_run(command, *args, **kwargs)
-        except subprocess.TimeoutExpired as error:
-            failure = error
+    for _attempt in range(3):
+        # A timed-out Chrome process can keep its profile lock and continue
+        # consuming resources on Windows.  Give every attempt an isolated
+        # profile and explicitly reap the process before retrying.
+        with tempfile.TemporaryDirectory(prefix="teloce-chrome-") as profile:
+            attempt_command = [arg for arg in command if not str(arg).startswith("--user-data-dir=")]
+            attempt_command.append(f"--user-data-dir={profile}")
+            run_kwargs = dict(kwargs)
+            timeout = run_kwargs.pop("timeout", 30)
+            if run_kwargs.pop("capture_output", False):
+                run_kwargs["stdout"] = subprocess.PIPE
+                run_kwargs["stderr"] = subprocess.PIPE
+            process = subprocess.Popen(attempt_command, *args, **run_kwargs)
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                return subprocess.CompletedProcess(attempt_command, process.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired as error:
+                failure = error
+                if os.name == "nt":
+                    _subprocess_run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    process.kill()
+                process.communicate()
     raise failure
 
 
@@ -228,6 +256,31 @@ def test_standalone_reacts_to_nested_objects_and_arrays(tmp_path: Path):
         )
         assert result.returncode == 0, result.stderr
         assert "<title>B:2</title>" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_standalone_loop_events_keep_live_item_scope(tmp_path: Path):
+    runtime = Path(__file__).parents[2].joinpath("src", "teloce", "runtime", "standalone.js")
+    (tmp_path / "teloce.js").write_text(runtime.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        '<div id="app"><button v-for="item in items" @click="item.done = !item.done">{{ item.name }}:{{ item.done }}</button></div>'
+        '<script src="/teloce.js"></script><script>teloce.createApp("#app", { items: [{name: "A", done: false}, {name: "B", done: false}] });'
+        'setTimeout(() => { document.querySelectorAll("button")[1].click(); setTimeout(() => document.title = document.querySelector("#app").textContent, 50); }, 50);</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path, hmr=False)
+    try:
+        time.sleep(0.1)
+        result = subprocess.run(
+            [_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--dump-dom",
+             "--virtual-time-budget=1500", f"http://127.0.0.1:{server.server_port}/"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "A:falseB:true" in result.stdout
     finally:
         server.shutdown()
         server.server_close()

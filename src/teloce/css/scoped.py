@@ -66,8 +66,10 @@ class CSSScoper:
         if selector.startswith('@keyframes'):
             return selector
         
-        # Split by comma (multiple selectors)
-        parts = selector.split(',')
+        # Split only on top-level commas. Commas inside functional pseudo
+        # classes, attribute selectors, strings, or escaped text are part of
+        # the selector and must not create a new rule.
+        parts = self._split_selector_list(selector)
         scoped_parts = []
         
         for part in parts:
@@ -80,6 +82,36 @@ class CSSScoper:
                 scoped_parts.append(scoped_part)
         
         return ', '.join(scoped_parts)
+
+    def _split_selector_list(self, selector: str) -> List[str]:
+        """Split a selector list while respecting CSS nesting syntax."""
+        parts: List[str] = []
+        start = 0
+        depth = 0
+        quote = ''
+        escaped = False
+        for index, character in enumerate(selector):
+            if escaped:
+                escaped = False
+                continue
+            if character == '\\':
+                escaped = True
+                continue
+            if quote:
+                if character == quote:
+                    quote = ''
+                continue
+            if character in "'\"":
+                quote = character
+            elif character in '([':
+                depth += 1
+            elif character in ')]':
+                depth = max(0, depth - 1)
+            elif character == ',' and depth == 0:
+                parts.append(selector[start:index].strip())
+                start = index + 1
+        parts.append(selector[start:].strip())
+        return [part for part in parts if part]
     
     def _scope_selector_part(self, selector: str, scope_id: str) -> str:
         """Scope a single selector part."""
@@ -144,11 +176,21 @@ class CSSScoper:
     
     def _scope_at_rule(self, at_rule: CSSAtRule, scope_id: str) -> Optional[str]:
         """Scope an at-rule."""
+        if at_rule.name in ('import', 'charset', 'namespace', 'layer') and not at_rule.rules and not at_rule.declarations:
+            return f"@{at_rule.name} {at_rule.value};"
+
         if at_rule.name in ('keyframes', '-webkit-keyframes', '-moz-keyframes'):
-            # Don't scope keyframes
-            return None
-        
-        if at_rule.rules:
+            # Keyframe selectors describe animation progress, not DOM nodes.
+            frames = []
+            for rule in at_rule.rules:
+                frames.append(f"{rule.selector} {{ {self._format_declarations(rule.declarations)} }}")
+            return f"@{at_rule.name} {at_rule.value} {{ {' '.join(frames)} }}"
+
+        if at_rule.declarations:
+            declarations = self._format_declarations(at_rule.declarations)
+            return f"@{at_rule.name} {at_rule.value} {{ {declarations} }}"
+
+        if at_rule.rules or at_rule.nested_at_rules:
             # Scope nested rules
             scoped_rules = []
             for rule in at_rule.rules:
@@ -156,6 +198,11 @@ class CSSScoper:
                 if scoped_selector:
                     declarations = self._format_declarations(rule.declarations)
                     scoped_rules.append(f"{scoped_selector} {{ {declarations} }}")
+
+            for nested in at_rule.nested_at_rules:
+                rendered = self._scope_at_rule(nested, scope_id)
+                if rendered:
+                    scoped_rules.append(rendered)
             
             if scoped_rules:
                 scoped_body = '\n'.join(scoped_rules)

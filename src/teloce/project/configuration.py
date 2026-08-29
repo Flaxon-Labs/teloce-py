@@ -29,6 +29,11 @@ class ProjectConfiguration:
                 'out_dir': 'dist',
                 'static_dir': 'static',
                 'clean': True,
+                'lazy_components': [],
+                'tree_shake': True,
+                'bundler': 'teloce',
+                'ssr': False,
+                'static': False,
             },
             'server': {
                 'port': 5173,

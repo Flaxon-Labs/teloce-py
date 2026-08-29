@@ -42,7 +42,10 @@ def test_examples_compile_and_build():
                 checked = subprocess.run(["node", "--check", str(generated)], capture_output=True, text=True)
                 assert checked.returncode == 0, (vel_file, checked.stderr)
 
-            build = Builder({"dev": True}).build(workspace)
+            # A copied example may contain a generated manifest from a local
+            # editable run. The test workspace must always exercise a full
+            # rebuild instead of inheriting that cache.
+            build = Builder({"dev": True, "clean": True}).build(workspace)
             assert build["total"] == len(vel_files)
             assert build["compiled"] == len(vel_files)
 

@@ -125,8 +125,47 @@ def main(args: Optional[list] = None) -> int:
         help='Create a dependency-aware production ES module bundle'
     )
     build_parser.add_argument(
+        '--bundler', choices=('teloce', 'esbuild'), default=None,
+        help='Bundler backend: dependency-free Teloce or optional industrial esbuild',
+    )
+    build_parser.add_argument(
+        '--no-splitting', action='store_true',
+        help='Disable code splitting when using esbuild',
+    )
+    build_parser.add_argument(
         '--entry',
         help='Bundle entry module relative to the output directory'
+    )
+    build_parser.add_argument(
+        '--report',
+        nargs='?', const='build-report.json',
+        help='Write a JSON bundle-size/build report (default: build-report.json)'
+    )
+    build_parser.add_argument(
+        '--max-size',
+        type=int,
+        default=0,
+        help='Warn when a generated file exceeds this many bytes'
+    )
+    build_parser.add_argument(
+        '--ssr',
+        action='store_true',
+        help='Emit Jinax server-rendered HTML templates alongside browser modules'
+    )
+    build_parser.add_argument(
+        '--static',
+        action='store_true',
+        help='Emit server-rendered Jinax HTML artifacts for static/server-only pages',
+    )
+    build_parser.add_argument(
+        '--lazy-components',
+        default=None,
+        help='Comma-separated component names to emit as dynamic lazy chunks'
+    )
+    build_parser.add_argument(
+        '--no-tree-shake',
+        action='store_true',
+        help='Keep unused local component imports in generated modules'
     )
     
     # Watch command

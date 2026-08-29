@@ -6,6 +6,7 @@ from pathlib import Path
 
 from teloce.build.builder import Builder
 from teloce.build.bundler import BundleError, ModuleBundler
+from teloce.compiler.compiler import compile as compile_component
 
 
 PARENT = '''
@@ -81,6 +82,98 @@ def test_production_build_can_clean_and_hash_assets():
         generated = list((root / "dist" / "static" / "js").glob("App.*.js"))
         assert len(generated) == 1
         assert generated[0].stem.startswith("App.")
+
+
+def test_build_writes_size_report_and_threshold_warnings():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source = root / "static" / "js" / "App.vel"
+        source.parent.mkdir(parents=True)
+        source.write_text("<template><div>Release</div></template>", encoding="utf-8")
+
+        result = Builder({"report": "metrics.json", "max_asset_size": 1}).build(root)
+        report = root / "dist" / "metrics.json"
+        assert result["mode"] == "production"
+        assert report.exists()
+        assert result["total_bytes"] > 1
+        assert result["size_warnings"]
+        assert '"total_bytes"' in report.read_text(encoding="utf-8")
+
+
+def test_incremental_dev_build_reuses_unchanged_components_and_invalidates_dependents():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        js = root / "static" / "js"
+        js.mkdir(parents=True)
+        child = js / "Child.vel"
+        app = js / "App.vel"
+        child.write_text("<template><span>Child</span></template>", encoding="utf-8")
+        app.write_text('<template><Child /></template><script>\nimport Child from "./Child.vel";\n</script>', encoding="utf-8")
+        first = Builder({"dev": True}).build(root)
+        assert first["compiled"] == 2
+        second = Builder({"dev": True}).build(root)
+        assert second["compiled"] == 0
+        assert second["cache_hits"] == 2
+        child.write_text("<template><span>Changed</span></template>", encoding="utf-8")
+        third = Builder({"dev": True}).build(root)
+        assert third["compiled"] == 2
+        assert third["cache_hits"] == 0
+
+
+def test_shared_runtime_build_emits_one_helper_module_and_imports_it():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source_dir = root / "static" / "js"
+        source_dir.mkdir(parents=True)
+        (source_dir / "App.vel").write_text("<template><div>{{ title }}</div></template>", encoding="utf-8")
+        result = Builder({"shared_runtime": True, "dev": False}).build(root)
+        assert result["failed"] == 0, result["errors"]
+        runtime = root / "dist" / "teloce-runtime.js"
+        app = root / "dist" / "static" / "js" / "App.js"
+        assert runtime.exists()
+        app_source = app.read_text(encoding="utf-8")
+        assert "../../teloce-runtime.js" in app_source
+        assert "__createReactive, __patch" in app_source
+        assert "const __patch =" not in app_source
+        assert "const __reactive =" not in app_source
+        assert result["runtime"] == "teloce-runtime.js"
+
+
+def test_lazy_component_import_emits_dynamic_chunk_loader():
+    source = '''<template><Child /></template><script>
+import Child from "./Child.vel";
+</script>'''
+    result = compile_component(source, filename="App.vel", source_maps=False,
+                     component_imports={"Child": "./Child.js"},
+                     lazy_components=["Child"])
+    assert result["success"]
+    assert 'import("./Child.js")' in result["code"]
+    assert "const Child = __teloceLazy" in result["code"]
+    assert result["code"].count("const Child = __teloceLazy") == 1
+    assert 'import Child from "./Child.js"' not in result["code"]
+
+
+def test_production_tree_shaking_removes_unused_local_component_imports():
+    source = '''<template><Used /></template><script>
+import Used from "./Used.vel";
+import Unused from "./Unused.vel";
+</script>'''
+    result = compile_component(source, filename="App.vel", source_maps=False,
+                               component_imports={"Used": "./Used.js", "Unused": "./Unused.js"},
+                               tree_shake=True)
+    assert result["success"]
+    assert 'import Used from "./Used.js"' in result["code"]
+    assert 'import Unused from "./Unused.js"' not in result["code"]
+
+
+def test_tree_shaking_does_not_select_filters_from_javascript_strings():
+    source = '''<template><p>{{ name }}</p></template><script>
+export default { data() { return { name: "a | orderBy" }; } };
+</script>'''
+    result = compile_component(source, filename="App.vel", source_maps=False,
+                               tree_shake=True)
+    assert result["success"]
+    assert '"orderBy":' not in result["code"]
 
 
 def test_hash_assets_fingerprints_static_files_and_rewrites_dev_entrypoint():

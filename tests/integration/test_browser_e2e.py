@@ -70,6 +70,35 @@ def test_generated_component_renders_and_reacts_in_real_chrome(tmp_path: Path):
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_generated_component_hydrates_existing_server_rendered_markup(tmp_path: Path):
+    (tmp_path / "static" / "js").mkdir(parents=True)
+    (tmp_path / "static" / "js" / "App.vel").write_text(
+        '<template><button @click="increment">{{ count }}</button></template>'
+        '<script>export default { data() { return { count: 0 }; }, methods: { increment() { this.count++; } } };</script>',
+        encoding="utf-8",
+    )
+    build_project(tmp_path, options={"dev": True, "source_maps": False})
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="app"><button data-server="yes">0</button></div>'
+        '<script type="module">import { mount } from "/static/js/App.js"; '
+        'mount("#app"); setTimeout(() => { const button = document.querySelector("button"); '
+        'document.title = (button.dataset.server || "missing") + ":" + button.textContent; }, 50);</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1000)
+        assert result.returncode == 0, result.stderr
+        # The existing node is reused, and its server-only attribute is
+        # removed because it is absent from the client template.
+        assert "<title>missing:0</title>" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
 def test_keyed_loop_preserves_dom_nodes_when_items_reorder(tmp_path: Path):
     (tmp_path / "static" / "js").mkdir(parents=True)
     (tmp_path / "static" / "js" / "App.vel").write_text(
@@ -115,6 +144,32 @@ def test_nested_loops_render_in_real_chrome(tmp_path: Path):
         result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1000)
         assert result.returncode == 0, result.stderr
         assert "A:1A:2" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_keyed_reconciliation_preserves_dom_identity_when_reordered(tmp_path: Path):
+    (tmp_path / "static" / "js").mkdir(parents=True)
+    (tmp_path / "static" / "js" / "App.vel").write_text(
+        '<template><ul><li v-for="item in items" v-bind:key="item.id">{{ item.name }}</li></ul></template>'
+        '<script>export default { data() { return { items: [{id: "a", name: "A"}, {id: "b", name: "B"}] }; } };</script>',
+        encoding="utf-8",
+    )
+    build_project(tmp_path, options={"dev": True, "source_maps": False})
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="app"></div><script type="module">import { mount } from "/static/js/App.js"; const app = mount("#app"); '
+        'setTimeout(() => { document.querySelectorAll("li")[1].dataset.keep = "yes"; app.state.items = [app.state.items[1], app.state.items[0]]; '
+        'setTimeout(() => document.title = document.querySelectorAll("li")[0].dataset.keep + ":" + document.querySelector("ul").textContent, 50); }, 50);</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1500)
+        assert result.returncode == 0, result.stderr
+        assert "<title>yes:BA</title>" in result.stdout
     finally:
         server.shutdown()
         server.server_close()

@@ -33,3 +33,13 @@ also discover local imports and copy assets.
 Compiler success does not replace browser testing. A component can be valid
 syntax and still have an incorrect API response, authorization assumption, or
 browser interaction.
+
+## Configuration and optimization boundary
+
+See [compiler configuration](compiler-config.md) for the generated config
+schema and release flags. Teloce can extract shared runtime files, select
+referenced filters/components, emit lazy imports, reconcile keyed DOM nodes,
+and report asset sizes. Optional esbuild performs whole-program JavaScript
+tree-shaking, splitting, minification, and source maps after Teloce generation.
+The built-in parser is source-preserving analysis tooling, not a TypeScript
+checker or a complete JavaScript proposal transformer.

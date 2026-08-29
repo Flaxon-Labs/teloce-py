@@ -15,3 +15,13 @@ __all__ = [
 ]
 
 from teloce.compiler.compiler import compile, compile_file, compile_project
+from teloce.ssr import render_ssr, to_jinax_template
+
+__all__ = [
+    "__version__",
+    "compile",
+    "compile_file",
+    "compile_project",
+    "render_ssr",
+    "to_jinax_template",
+]

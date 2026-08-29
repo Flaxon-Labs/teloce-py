@@ -1,0 +1,11 @@
+<template>
+  <GalleryPage />
+</template>
+
+<script>
+import GalleryPage from "./pages/GalleryPage.vel";
+
+export default {
+  components: { GalleryPage }
+};
+</script>

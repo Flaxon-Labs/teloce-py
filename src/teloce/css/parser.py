@@ -44,6 +44,7 @@ class CSSAtRule:
     name: str
     value: str = ""
     rules: List[CSSRule] = field(default_factory=list)
+    nested_at_rules: List['CSSAtRule'] = field(default_factory=list)
     declarations: List[CSSDeclaration] = field(default_factory=list)
     line: int = 0
     column: int = 0
@@ -206,9 +207,39 @@ class CSSParser:
         # Check if it's a block at-rule (@media, @supports, etc.)
         if self._peek() == '{':
             self._advance()  # Skip '{'
-            
+
             rules = []
             declarations = []
+            nested_at_rules = []
+
+            # These at-rules contain declarations rather than selector rules.
+            # Treating their properties as selectors loses valid CSS such as
+            # fonts and print-page configuration.
+            declaration_block = name.lower() in {
+                'font-face', 'page', 'counter-style', 'property',
+                'font-feature-values', 'viewport', '-ms-viewport',
+                'color-profile', 'font-palette-values',
+            }
+
+            if declaration_block:
+                while self.position < len(self.source):
+                    self._skip_whitespace_and_comments()
+                    if self._peek() == '}':
+                        self._advance()
+                        break
+                    decl = self._parse_declaration()
+                    if decl:
+                        declarations.append(decl)
+                    self._skip_whitespace_and_comments()
+                    if self._peek() == ';':
+                        self._advance()
+                return CSSAtRule(
+                    name=name,
+                    value=value,
+                    declarations=declarations,
+                    line=start_line,
+                    column=start_col,
+                )
             
             while self.position < len(self.source):
                 self._skip_whitespace_and_comments()
@@ -221,10 +252,8 @@ class CSSParser:
                 if self._peek() == '@':
                     nested = self._parse_at_rule()
                     if nested:
-                        # Flatten nested at-rules into rules
-                        for rule in nested.rules:
-                            rules.append(rule)
-                        continue
+                        nested_at_rules.append(nested)
+                    continue
                 
                 # Parse regular rule
                 rule = self._parse_rule()
@@ -236,6 +265,7 @@ class CSSParser:
                 value=value,
                 rules=rules,
                 declarations=declarations,
+                nested_at_rules=nested_at_rules,
                 line=start_line,
                 column=start_col
             )

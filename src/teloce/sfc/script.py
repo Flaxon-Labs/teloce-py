@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 from dataclasses import dataclass, field
 
 from teloce.sfc.component import ComponentScript
+from teloce.javascript.parser import parse_javascript
 
 
 def _read_ts_balanced(source: str, opening: int, open_char: str = '{', close_char: str = '}') -> int:
@@ -244,6 +245,11 @@ class ScriptParser:
             return script
         
         try:
+            # Validate module structure with Teloce's source-located parser
+            # before extracting component options. The original source is
+            # preserved for generation; this pass only establishes safe
+            # statement boundaries and catches malformed delimiters.
+            parse_javascript(source)
             # Parse imports
             self._parse_imports(source)
             script.imports = list(self.imports)
@@ -299,41 +305,48 @@ class ScriptParser:
         return code.strip()
     
     def _parse_imports(self, source: str):
-        """Parse import statements."""
-        # Default import: import X from 'source'
-        default_pattern = r'import\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]'
-        for match in re.finditer(default_pattern, source):
-            name = match.group(1)
-            source_path = match.group(2)
-            self.imports.append(ScriptImport(source_path, [name], is_default=True, line=source[:match.start()].count('\n') + 1))
-            # Check if it's a component (PascalCase)
-            if name and name[0].isupper():
-                self.components[name] = source_path
-        
-        # Named import: import { X, Y } from 'source'
-        named_pattern = r'import\s*{([^}]+)}\s*from\s+[\'"]([^\'"]+)[\'"]'
-        for match in re.finditer(named_pattern, source):
-            names_str = match.group(1)
-            source_path = match.group(2)
-            # Parse names with aliases
-            for name_part in names_str.split(','):
-                name_part = name_part.strip()
-                if ' as ' in name_part:
-                    name, alias = name_part.split(' as ')
-                    name = name.strip()
-                    alias = alias.strip()
-                    self.imports.append(ScriptImport(source_path, [name], alias=alias, line=source[:match.start()].count('\n') + 1))
-                else:
-                    name = name_part.strip()
-                    if name:
-                        self.imports.append(ScriptImport(source_path, [name], line=source[:match.start()].count('\n') + 1))
-        
-        # Namespace import: import * as X from 'source'
-        namespace_pattern = r'import\s+\*\s+as\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]'
-        for match in re.finditer(namespace_pattern, source):
-            name = match.group(1)
-            source_path = match.group(2)
-            self.imports.append(ScriptImport(source_path, ['*'], is_namespace=True, alias=name, line=source[:match.start()].count('\n') + 1))
+        """Parse imports from source-preserving AST nodes."""
+        for node in parse_javascript(source).body:
+            if node.kind != "ImportDeclaration":
+                continue
+            statement = node.source.strip().rstrip(";").strip()
+            line = node.line
+            side_effect = re.fullmatch(r'import\s*([\'"])(.*?)\1', statement, re.S)
+            if side_effect:
+                self.imports.append(ScriptImport(side_effect.group(2), [], line=line))
+                continue
+            match = re.fullmatch(r'import\s+(.+?)\s+from\s+([\'"])(.*?)\2', statement, re.S)
+            if not match:
+                raise ValueError(f"Invalid import declaration: {statement}")
+            bindings, source_path = match.group(1).strip(), match.group(3)
+            default_name = None
+            if bindings.startswith("*"):
+                namespace = re.fullmatch(r'\*\s+as\s+([A-Za-z_$][\w$]*)', bindings)
+                if not namespace:
+                    raise ValueError(f"Invalid namespace import: {statement}")
+                self.imports.append(ScriptImport(source_path, ["*"], is_namespace=True, alias=namespace.group(1), line=line))
+                continue
+            if bindings.startswith("{"):
+                named = bindings
+            else:
+                default_name, _, named = bindings.partition(",")
+                default_name = default_name.strip()
+                if not re.fullmatch(r'[A-Za-z_$][\w$]*', default_name):
+                    raise ValueError(f"Invalid default import: {statement}")
+                self.imports.append(ScriptImport(source_path, [default_name], is_default=True, line=line))
+                if default_name[0].isupper():
+                    self.components[default_name] = source_path
+            if named.strip():
+                if not (named.strip().startswith("{") and named.strip().endswith("}")):
+                    raise ValueError(f"Invalid named import: {statement}")
+                for part in named.strip()[1:-1].split(","):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    pieces = re.split(r'\s+as\s+', part)
+                    imported = pieces[0].strip()
+                    alias = pieces[-1].strip() if len(pieces) > 1 else None
+                    self.imports.append(ScriptImport(source_path, [imported], alias=alias, line=line))
     
     def _parse_exports(self, source: str):
         """Parse export statements."""
@@ -864,15 +877,15 @@ class ScriptParser:
     
     def _extract_block(self, source: str, block_name: str) -> Optional[str]:
         """Extract a named block from the source."""
-        # Find the block start
-        pattern = rf'{block_name}\s*:\s*'
-        match = re.search(pattern, source)
-        if not match:
+        start_match = self._find_property(source, block_name)
+        if start_match is None:
             return None
-        
-        start = match.end()
-        
+
+        start = start_match
+
         # Find the block content
+        while start < len(source) and source[start].isspace():
+            start += 1
         if start >= len(source):
             return None
         
@@ -885,6 +898,45 @@ class ScriptParser:
             # Array block
             return self._extract_array_block(source, start)
         
+        return None
+
+    @staticmethod
+    def _find_property(source: str, name: str) -> Optional[int]:
+        """Find a top-level-looking ``name:`` outside JS strings/comments.
+
+        Option extraction is intentionally lightweight, but it must not let
+        documentation strings such as ``"computed: { fake: true }"`` become
+        component options. This scanner only identifies the property; the
+        existing balanced readers still parse its value.
+        """
+        quote = None
+        escaped = False
+        line_comment = block_comment = False
+        index = 0
+        while index < len(source):
+            char = source[index]
+            nxt = source[index + 1] if index + 1 < len(source) else ""
+            if line_comment:
+                if char == "\n": line_comment = False
+            elif block_comment:
+                if char == "*" and nxt == "/": block_comment = False; index += 1
+            elif quote:
+                if escaped: escaped = False
+                elif char == "\\": escaped = True
+                elif char == quote: quote = None
+            elif char in "'\"`": quote = char
+            elif char == "/" and nxt == "/": line_comment = True; index += 1
+            elif char == "/" and nxt == "*": block_comment = True; index += 1
+            elif source.startswith(name, index):
+                before = source[index - 1] if index else ""
+                after_index = index + len(name)
+                if (not (before.isalnum() or before in "_$") and
+                        (after_index == len(source) or not (source[after_index].isalnum() or source[after_index] in "_$"))):
+                    cursor = after_index
+                    while cursor < len(source) and source[cursor].isspace(): cursor += 1
+                    if cursor < len(source) and source[cursor] == ":":
+                        return cursor + 1
+            index += 1
         return None
     
     def _extract_object_block(self, source: str, start: int) -> Optional[str]:
