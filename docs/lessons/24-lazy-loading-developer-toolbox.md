@@ -5,6 +5,14 @@ This lesson uses the same architecture as the Developer Toolbox: one real
 load a utility only when the user selects it. Do not create placeholder pages
 or components merely to make a project look larger. Every file below is used.
 
+
+## Try the live developer toolbox
+
+Open the production showcase at **[https://developertoolbox-made-with-teloce-tau.vercel.app/#json](https://developertoolbox-made-with-teloce-tau.vercel.app/#json)**. it was made using Flaxon Asgi Framework it new this another production built with teloce and flaxon.
+
+Source code: [aldanedev-create/developer-tool on GitHub](https://github.com/aldanedev-create/Developertoolbox-made-with-teloce).
+
+
 ## Project layout
 
 ```text
