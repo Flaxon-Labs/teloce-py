@@ -70,6 +70,42 @@ def test_generated_component_renders_and_reacts_in_real_chrome(tmp_path: Path):
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_shared_runtime_nested_component_slots_and_events_in_real_chrome(tmp_path: Path):
+    source_dir = tmp_path / "static" / "js"
+    source_dir.mkdir(parents=True)
+    (source_dir / "Child.vel").write_text(
+        '<template><button @click="$emit(\'press\', $event)"><slot></slot></button></template>'
+        '<script>export default {};</script><style scoped>button { color: blue; }</style>',
+        encoding="utf-8",
+    )
+    (source_dir / "App.vel").write_text(
+        '<template><main><h1>Use `.vel` safely</h1><Child @press="count++">Clicked {{ count }} times</Child></main></template>'
+        '<script>import Child from "./Child.vel"; export default { components: { Child }, data() { return { count: 0 }; } };</script>',
+        encoding="utf-8",
+    )
+    build_project(
+        tmp_path,
+        options={"dev": True, "source_maps": False, "shared_runtime": True},
+    )
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="app"></div><script type="module">import { mount } from "/static/js/App.js"; mount("#app"); '
+        'setTimeout(() => { document.querySelector("button").click(); setTimeout(() => '
+        'document.title = document.querySelector("h1").textContent + ":" + document.querySelector("button").textContent, 75); }, 75);'
+        '</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1500)
+        assert result.returncode == 0, result.stderr
+        assert "<title>Use `.vel` safely:Clicked 1 times</title>" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
 def test_generated_component_hydrates_existing_server_rendered_markup(tmp_path: Path):
     (tmp_path / "static" / "js").mkdir(parents=True)
     (tmp_path / "static" / "js" / "App.vel").write_text(

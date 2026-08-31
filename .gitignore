@@ -7,6 +7,21 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.demo-chrome-final/
+.demo-chrome-fixed/
+.demo-chrome-fixed2/
+.demo-chrome-profile/
+.demo-chrome-profile2/
+.demo-chrome-profile3/
+.demo-chrome-profile4/
+.demo-chrome-profile5/
+.demo-chrome-profile6/
+.demo-chrome-profile7/
+.demo-chrome-profile8/
+.demo-chrome-profile9/
+.demo-chrome-shared/
+.demo-chrome-shared2/
+.demo-edge-profile/
 
 # C extensions
 *.so

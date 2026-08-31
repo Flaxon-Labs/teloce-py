@@ -125,18 +125,32 @@ def test_shared_runtime_build_emits_one_helper_module_and_imports_it():
         root = Path(directory)
         source_dir = root / "static" / "js"
         source_dir.mkdir(parents=True)
-        (source_dir / "App.vel").write_text("<template><div>{{ title }}</div></template>", encoding="utf-8")
+        (source_dir / "App.vel").write_text(
+            "<template><div>Use `.vel` safely; ${templateText}</div></template>",
+            encoding="utf-8",
+        )
         result = Builder({"shared_runtime": True, "dev": False}).build(root)
         assert result["failed"] == 0, result["errors"]
-        runtime = root / "dist" / "teloce-runtime.js"
+        runtime = root / "dist" / "static" / "teloce-runtime.js"
         app = root / "dist" / "static" / "js" / "App.js"
         assert runtime.exists()
         app_source = app.read_text(encoding="utf-8")
-        assert "../../teloce-runtime.js" in app_source
+        assert "../teloce-runtime.js" in app_source
         assert "__createReactive, __patch" in app_source
         assert "const __patch =" not in app_source
         assert "const __reactive =" not in app_source
-        assert result["runtime"] == "teloce-runtime.js"
+        assert result["runtime"] == "static/teloce-runtime.js"
+        completed = subprocess.run(
+            ["node", "--input-type=module", "-e", (
+                "const url = new URL(" + repr(app.as_uri()) + ");"
+                "const module = await import(url);"
+                "if (typeof module.mount !== 'function') process.exit(2);"
+            )],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stderr
 
 
 def test_lazy_component_import_emits_dynamic_chunk_loader():

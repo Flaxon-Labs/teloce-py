@@ -1,0 +1,11 @@
+<template>
+  <section :class="open ? 'backdrop' : 'backdrop is-hidden'" role="presentation" @click.self="$emit('close')"><div class="modal" role="dialog" aria-modal="true" :aria-label="title"><header><h2>{{ title }}</h2><button type="button" aria-label="Close" @click="$emit('close')">X</button></header><div><slot></slot></div></div></section>
+</template>
+
+<script>
+export default { props: { open: Boolean, title: String } };
+</script>
+
+<style scoped>
+.backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 1rem; background: #030612aa; z-index: 10; }.backdrop.is-hidden { display: none; }.modal { width: min(32rem, 100%); border: 1px solid #56638d; border-radius: 1rem; padding: 1.1rem; background: #131b31; color: #eef2ff; }.modal header { display: flex; justify-content: space-between; align-items: center; }.modal button { border: 0; background: transparent; color: inherit; font-size: 1.5rem; cursor: pointer; }
+</style>

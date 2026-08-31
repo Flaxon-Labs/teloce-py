@@ -141,6 +141,12 @@ export const __patch = (target, html) => {
     for (const attr of Array.from(oldNode.attributes)) if (managedAttributes.has(attr.name) && !newNode.hasAttribute(attr.name)) oldNode.removeAttribute(attr.name);
     for (const attr of Array.from(newNode.attributes)) if (oldNode.getAttribute(attr.name) !== attr.value) oldNode.setAttribute(attr.name, attr.value);
     oldNode.__teloceManagedAttributes = new Set(Array.from(newNode.attributes).map(attribute => attribute.name));
+    if (oldNode.__teloceInstance) {
+      // A mounted component owns its rendered subtree. Preserve that subtree
+      // and retain the new declarative host as the next props/slots source.
+      oldNode.__telocePendingPropsSource = newNode.cloneNode(true);
+      return oldNode;
+    }
     patchChildren(oldNode, newNode);
     return oldNode;
   };
@@ -317,7 +323,11 @@ class Generator:
         # when the component mounts.  The standalone .css file is still emitted
         # by the build pipeline for deployments that prefer external CSS.
         style_code = self._generate_component_css(component)
-        lines.append(f'{self._indent()}template: `{template_code}`,')
+        # Templates are data. A JavaScript template literal is unsafe here:
+        # ordinary UI copy may contain backticks or `${...}`, which would
+        # terminate/interpolate generated code. JSON encoding produces a
+        # valid string literal for every template character.
+        lines.append(f'{self._indent()}template: {json.dumps(template_code, ensure_ascii=False)},')
         
         self.indent_level -= 1
         lines.append('};')
@@ -530,6 +540,7 @@ class Generator:
             '    const managedAttributes = oldNode.__teloceManagedAttributes || new Set(); for (const attr of Array.from(oldNode.attributes)) if (managedAttributes.has(attr.name) && !newNode.hasAttribute(attr.name)) oldNode.removeAttribute(attr.name);',
             '    for (const attr of Array.from(newNode.attributes)) if (oldNode.getAttribute(attr.name) !== attr.value) oldNode.setAttribute(attr.name, attr.value);',
             '    oldNode.__teloceManagedAttributes = new Set(Array.from(newNode.attributes).map(attribute => attribute.name));',
+            '    if (oldNode.__teloceInstance) { oldNode.__telocePendingPropsSource = newNode.cloneNode(true); return oldNode; }',
             '    patchChildren(oldNode, newNode); return oldNode;',
             '  };',
             '  const patchChildren = (parent, templateParent) => {',
@@ -544,7 +555,7 @@ class Generator:
             '  // explicit advanced integrations and always normalize the result to text.',
             '  let output = typeof source === "function" ? source(state) : source == null ? "" : String(source);',
             '  output = output.replace(/<if\\s+(?:condition|test)="([^"]*)">([\\s\\S]*?)(?:<else>([\\s\\S]*?))?<\\/if>/g, (_, test, yes, no) => __evaluate(test, state) ? yes : (no || ""));',
-            '  output = output.replace(/<slot(?:\\s+name="([^"]*)")?\\s*><\\/slot>/g, (_, name) => (state.__slots || {})[name || "default"] || "");',
+            '  output = output.replace(/<slot\\b([^>]*)>\\s*<\\/slot>/g, (_, attributes) => { const name = attributes.match(/(?:^|\\s)name="([^"]*)"/)?.[1] || "default"; return (state.__slots || {})[name] || ""; });',
             '  const __renderLoops = (source, state) => {',
             '    let cursor = source.indexOf("<for ");',
             '    while (cursor >= 0) {',
@@ -565,8 +576,8 @@ class Generator:
             '  if (typeof target === "string") target = document.querySelector(target);',
             '  if (!target) throw new Error("Teloce mount target was not found");',
             '  __installStyle();',
-            '  let update = () => {}; let rendering = false; let updateQueued = false; let updateScheduled = false;',
-            '  const requestUpdate = () => { if (rendering || updateScheduled) { updateQueued = true; return; } updateScheduled = true; queueMicrotask(() => { updateScheduled = false; rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; requestUpdate(); } } }); };',
+            '  let update = () => {}; let rendering = false; let updateQueued = false; let updateScheduled = false; let suppressUpdates = false;',
+            '  const requestUpdate = () => { if (suppressUpdates) return; if (rendering || updateScheduled) { updateQueued = true; return; } updateScheduled = true; queueMicrotask(() => { updateScheduled = false; rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; requestUpdate(); } } }); };',
             '  let mounted = false;',
             '  let previous = {};',
             '  const __reactiveCache = new WeakMap();',
@@ -583,41 +594,52 @@ class Generator:
             '    if (!mounted && typeof __component.beforeMount === "function") __component.beforeMount.call(state);',
             '    __patch(target, __renderTemplate(__template, state));',
             '    const nativeEvents = new Set(["click", "input", "submit", "change", "keyup", "keydown", "focus", "blur", "mouseenter", "mouseleave"]);',
-            '    target.querySelectorAll("*").forEach(element => {',
+            '    const __eventExpressionScope = values => new Proxy(values, { get(object, key, receiver) { return Reflect.has(object, key) ? Reflect.get(object, key, receiver) : state[key]; }, set(object, key, value, receiver) { if (Reflect.has(state, key)) { state[key] = value; return true; } return Reflect.set(object, key, value, receiver); } });',
+            '    const __bindEvents = (element, force = false) => {',
             '      for (const attribute of Array.from(element.attributes)) if (attribute.name.startsWith("data-teloce-event-")) {',
-            '        const eventKey = attribute.name.slice("data-teloce-event-".length);',
-            '        const [eventName, ...modifiers] = eventKey.split(".");',
-            '        const handlerName = attribute.value;',
-            '        const actualEvent = nativeEvents.has(eventName) ? eventName : `teloce:${eventName}`;',
-            '        if (!element.__teloceHandlers) element.__teloceHandlers = new Map();',
-            '        const previousHandler = element.__teloceHandlers.get(attribute.name); const signature = eventKey + "=" + handlerName;',
-            '        if (!previousHandler || previousHandler.signature !== signature) { if (previousHandler) element.removeEventListener(previousHandler.actualEvent, previousHandler.listener, previousHandler.options); const listener = event => { if (modifiers.includes("self") && event.target !== element) return; if (modifiers.includes("enter") && event.key !== "Enter") return; if (modifiers.includes("esc") && event.key !== "Escape") return; if (modifiers.includes("ctrl") && !event.ctrlKey) return; if (modifiers.includes("shift") && !event.shiftKey) return; if (modifiers.includes("alt") && !event.altKey) return; if (modifiers.includes("meta") && !event.metaKey) return; if (modifiers.includes("right") && event.button !== 2) return; if (modifiers.includes("middle") && event.button !== 1) return; if (modifiers.includes("left") && event.button !== 0) return; if (modifiers.includes("prevent")) event.preventDefault(); if (modifiers.includes("stop")) event.stopPropagation(); const eventScope = { ...state }; try { Object.assign(eventScope, JSON.parse(element.getAttribute("data-teloce-loop-scope") || "{}")); } catch (_) {} const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __evaluate(handlerName, { ...eventScope, event, $event: event }); }; const options = { once: modifiers.includes("once"), capture: modifiers.includes("capture"), passive: modifiers.includes("passive") }; element.__teloceHandlers.set(attribute.name, { signature, actualEvent, listener, options }); element.addEventListener(actualEvent, listener, options); }',
+            '        const eventKey = attribute.name.slice("data-teloce-event-".length); const [eventName, ...modifiers] = eventKey.split("."); const handlerName = attribute.value; const actualEvent = nativeEvents.has(eventName) ? eventName : `teloce:${eventName}`;',
+            '        if (!element.__teloceHandlers) element.__teloceHandlers = new Map(); const previousHandler = element.__teloceHandlers.get(attribute.name); const signature = eventKey + "=" + handlerName;',
+            '        if (force || !previousHandler || previousHandler.signature !== signature) { if (previousHandler) element.removeEventListener(previousHandler.actualEvent, previousHandler.listener, previousHandler.options); const listener = event => { if (modifiers.includes("self") && event.target !== element) return; if (modifiers.includes("enter") && event.key !== "Enter") return; if (modifiers.includes("esc") && event.key !== "Escape") return; if (modifiers.includes("ctrl") && !event.ctrlKey) return; if (modifiers.includes("shift") && !event.shiftKey) return; if (modifiers.includes("alt") && !event.altKey) return; if (modifiers.includes("meta") && !event.metaKey) return; if (modifiers.includes("right") && event.button !== 2) return; if (modifiers.includes("middle") && event.button !== 1) return; if (modifiers.includes("left") && event.button !== 0) return; if (modifiers.includes("prevent")) event.preventDefault(); if (modifiers.includes("stop")) event.stopPropagation(); const eventScope = { ...state }; try { Object.assign(eventScope, JSON.parse(element.getAttribute("data-teloce-loop-scope") || "{}")); } catch (_) {} const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __runEventExpression(handlerName, __eventExpressionScope({ ...eventScope, event, $event: event })); }; const options = { once: modifiers.includes("once"), capture: modifiers.includes("capture"), passive: modifiers.includes("passive") }; element.__teloceHandlers.set(attribute.name, { signature, actualEvent, listener, options }); element.addEventListener(actualEvent, listener, options); }',
             '      }',
+            '    };',
+            '    target.querySelectorAll("*").forEach(element => {',
+            '      __bindEvents(element);',
             '      const model = element.getAttribute("data-teloce-model");',
             '      if (model) { const current = __evaluate(model, state); if (element.type === "checkbox") element.checked = Boolean(current); else if (element.value !== String(current ?? "")) element.value = current ?? ""; if (!element.__teloceModel) { element.__teloceModel = true; const eventName = element.type === "checkbox" || element.tagName === "SELECT" ? "change" : "input"; element.addEventListener(eventName, event => __assign(model, element.type === "checkbox" ? element.checked : element.value, state)); } }',
             '      for (const attribute of Array.from(element.attributes)) if (attribute.name.startsWith("data-teloce-bind-")) { const name = attribute.name.slice("data-teloce-bind-".length); __applyBinding(element, name, __evaluate(attribute.value, state)); }',
             '      for (const attribute of Array.from(element.attributes)) { const match = attribute.name.match(/^v-([\\w-]+)$/); const directive = match && __pluginDirectives[match[1]]; if (directive?.render) directive.render(element, { name: match[1], expression: attribute.value, value: __evaluate(attribute.value, state), state, modifiers: [] }); }',
             '    });',
-            '    for (const [name, child] of Object.entries(__components)) {',
-            '      target.querySelectorAll(name.toLowerCase()).forEach(element => {',
-            '        if (!element.__teloceMounted && child && typeof child.mount === "function") {',
-            '          element.__teloceMounted = true;',
-            '          element.__teloceInstance = child.mount(element, __readProps(element, state));',
-            '        } else if (element.__teloceInstance?.updateProps) { element.__teloceInstance.updateProps(__readProps(element, state)); }',
-            '      });',
+            '    const componentLookup = new Map(Object.entries(__components).map(([name, child]) => [name.toLowerCase(), child]));',
+            '    const newlyMounted = new Set();',
+            '    let mountedChild = true;',
+            '    while (mountedChild) {',
+            '      mountedChild = false;',
+            '      for (const element of Array.from(target.querySelectorAll("*"))) {',
+            '        const child = componentLookup.get(element.tagName.toLowerCase());',
+            '        if (!child || element.__teloceMounted || typeof child.mount !== "function") continue;',
+            '        element.__teloceMounted = true;',
+            '        element.__teloceInstance = child.mount(element, __readProps(element, state));',
+            '        newlyMounted.add(element);',
+            '        mountedChild = true;',
+            '        break;',
+            '      }',
+            '    }',
+            '    for (const element of Array.from(target.querySelectorAll("*"))) {',
+            '      if (componentLookup.has(element.tagName.toLowerCase()) && !newlyMounted.has(element) && element.__teloceInstance?.updateProps) { const source = element.__telocePendingPropsSource || element; element.__teloceInstance.updateProps(__readProps(source, state)); element.__telocePendingPropsSource = undefined; }',
             '    }',
             '    target.querySelectorAll("teloce-dynamic").forEach(element => {',
             '      const name = __evaluate(element.getAttribute("data-teloce-is") || "", state);',
             '      const child = __components[name] || __components[String(name).replace(/^./, value => value.toUpperCase())];',
             '      if (!element.__teloceMounted && child && typeof child.mount === "function") { element.__teloceMounted = true; element.__teloceInstance = child.mount(element, __readProps(element, state)); } else if (element.__teloceInstance?.updateProps) { element.__teloceInstance.updateProps(__readProps(element, state)); }',
             '    });',
+            '    for (const element of Array.from(target.querySelectorAll("*"))) if (componentLookup.has(element.tagName.toLowerCase())) __bindEvents(element, true);',
             '    if (!mounted && typeof __component.mounted === "function") __component.mounted.call(state);',
             '    mounted = true;',
             '    for (const [name, handler] of Object.entries(__component.watch || {})) { if (!Object.is(previous[name], state[name])) handler.call(state, state[name], previous[name]); previous[name] = state[name]; }',
             '    if (wasMounted && typeof __component.updated === "function") __component.updated.call(state);',
             '  };',
             '  update();',
-            '  const updateProps = nextProps => { for (const [key, value] of Object.entries(__normalizeProps(nextProps))) state[key] = value; };',
+            '  const updateProps = nextProps => { const normalized = __normalizeProps(nextProps); let changed = false; suppressUpdates = true; try { for (const [key, value] of Object.entries(normalized)) if (!Object.is(state[key], value)) { state[key] = value; changed = true; } } finally { suppressUpdates = false; } if (changed) { rendering = true; try { update(); } finally { rendering = false; } } };',
             '  const __hmrRecord = { target, state, reload: async () => { const snapshot = {}; for (const key of Object.keys(state)) if (!key.startsWith("$") && typeof state[key] !== "function") snapshot[key] = state[key]; __unregisterHmr(__hmrRecord); const fresh = await import(`${__moduleUrl}?teloce_hmr=${Date.now()}`); return fresh.mount(target, snapshot); } }; __registerHmr(__hmrRecord);',
             '  const __instance = { state, update, updateProps, unmount: () => { if (!mounted) return; if (typeof __component.beforeUnmount === "function") __component.beforeUnmount.call(state); __unregisterHmr(__hmrRecord); const nodes = [target, ...target.querySelectorAll("*")]; nodes.forEach(element => { element.__teloceInstance?.unmount?.(); if (element.__teloceHandlers) for (const record of element.__teloceHandlers.values()) element.removeEventListener(record.actualEvent, record.listener, record.options); element.__teloceHandlers?.clear?.(); element.__teloceInstance = undefined; element.__teloceMounted = false; }); target.replaceChildren(); mounted = false; if (typeof __component.unmounted === "function") __component.unmounted.call(state); } }; __hmrRecord.instance = __instance; return __instance;',
             '}',

@@ -49,6 +49,15 @@ export default {
         assert 'message' in result['code']
         assert '__safeEvaluate' in result['code']
 
+    def test_interpolation_preserves_surrounding_text_whitespace(self):
+        source = '''
+<template><button>Clicked {{ count }} times</button></template>
+<script>export default { data() { return { count: 0 }; } };</script>
+'''
+        result = compile(source, filename="Whitespace.vel", source_maps=False)
+        assert result['success'] is True
+        assert 'Clicked {{ count }} times' in result['code']
+
     def test_compile_with_event(self):
         """Test compilation with event binding."""
         source = """

@@ -1,0 +1,7 @@
+<script>
+import DemoShell from "./DemoShell.vel";
+
+export default { components: { DemoShell } };
+</script>
+
+<template><DemoShell /></template>

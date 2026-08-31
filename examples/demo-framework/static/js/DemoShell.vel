@@ -1,0 +1,41 @@
+<script>
+import UiButton from "./components/UiButton.vel";
+import UiCard from "./components/UiCard.vel";
+import UiModal from "./components/UiModal.vel";
+
+export default {
+  components: { UiButton, UiCard, UiModal },
+  data() { return { modalOpen: false, clicks: 0 }; },
+  methods: { addClick() { this.clicks++; }, closeModal() { this.modalOpen = false; } },
+};
+</script>
+
+<template>
+  <main class="demo-shell">
+    <nav><strong>MiniVel UI</strong><span>Runnable component framework</span></nav>
+    <h1>Reusable `.vel` components</h1>
+    <p>Props, events, slots, imports, and scoped styles working together.</p>
+    <div class="grid">
+      <UiCard title="Buttons" tag="ui-button">
+        <UiButton @press="addClick">Clicked {{ clicks }} times</UiButton>
+        <UiButton variant="quiet" @press="modalOpen = true">Open modal</UiButton>
+      </UiCard>
+      <UiCard title="Framework contract" tag="props + events + slots">
+        <ul><li>Props configure components.</li><li>Events send actions upward.</li><li>Slots provide page content.</li></ul>
+      </UiCard>
+    </div>
+    <UiModal :open="modalOpen" title="MiniVel modal" @close="closeModal">
+      <p>This modal is an imported `.vel` component.</p>
+      <UiButton variant="quiet" @press="closeModal">Close</UiButton>
+    </UiModal>
+  </main>
+</template>
+
+<style scoped>
+.demo-shell { min-height: 100vh; padding: 2rem; background: #080d1b; color: #eef2ff; font: 1rem/1.5 system-ui, sans-serif; }
+nav { display: flex; justify-content: space-between; max-width: 64rem; margin: auto; color: #9aa8cf; }
+.demo-shell > h1, .demo-shell > p, .grid { max-width: 64rem; margin-left: auto; margin-right: auto; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+.grid .ui-button + .ui-button { margin-left: .5rem; }
+@media (max-width: 700px) { .demo-shell { padding: 1rem; } .grid { grid-template-columns: 1fr; } }
+</style>

@@ -1,0 +1,11 @@
+<template>
+  <section class="ui-card"><header><h2>{{ title }}</h2><small>{{ tag }}</small></header><div class="ui-card__body"><slot></slot></div></section>
+</template>
+
+<script>
+export default { props: { title: String, tag: String } };
+</script>
+
+<style scoped>
+.ui-card { border: 1px solid #293452; border-radius: 1rem; background: #11182b; color: #eef2ff; box-shadow: 0 .8rem 2rem #05081380; }.ui-card header { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem 0; }.ui-card h2 { margin: 0; font-size: 1.05rem; }.ui-card small { color: #8dded0; }.ui-card__body { padding: 1.1rem; }
+</style>

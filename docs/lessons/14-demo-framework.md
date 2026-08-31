@@ -29,7 +29,7 @@ export default { props: { variant: String, disabled: Boolean } }
 </script>
 <style scoped>
 .ui-button { border: 0; border-radius: .7rem; padding: .7rem 1rem; color: white; cursor: pointer; font: inherit; }
-.ui-button--primary { background: #5d55d9; }
+.ui-button--primary { background: #4135e7; }
 .ui-button--quiet { background: #27304b; }
 .ui-button:disabled { cursor: not-allowed; opacity: .5; }
 </style>
@@ -145,15 +145,24 @@ from flask import Flask, render_template
 from teloce.build import build_project
 
 ROOT = Path(__file__).parent
-app = Flask(__name__, template_folder=str(ROOT / 'templates'))
+app = Flask(
+    __name__,
+    static_folder=str(ROOT / 'dist' / 'static'),
+    static_url_path='/static',
+    template_folder=str(ROOT / 'templates'),
+)
 
 @app.get('/')
 def home(): return render_template('index.html')
 
 if __name__ == '__main__':
-    result = build_project(ROOT, options={'dev': True, 'source_maps': True})
+    result = build_project(
+        ROOT,
+        options={'dev': True, 'source_maps': True, 'shared_runtime': True},
+    )
     print(f"Compiled {result['compiled']} .vel components")
-    app.run(debug=True, port=5000)
+    # Do not let Flask's reloader start a second process after the build.
+    app.run(debug=False, port=5000, use_reloader=False)
 ```
 
 `templates/index.html`:
@@ -168,6 +177,15 @@ Run:
 ```bash
 python app.py
 ```
+
+Teloce writes the generated module to `dist/static/js/App.js` and the shared
+browser helpers to `dist/static/teloce-runtime.js`. The explicit
+`static_folder` setting is required: leaving Flask at its default `static/`
+folder is the reason `/static/js/App.js` returns 404.
+
+The same project is included as a runnable companion in
+[`examples/demo-framework`](../../examples/demo-framework). Run it before
+adapting the code into another application.
 
 ## What makes this a framework?
 

@@ -1,0 +1,12 @@
+<template>
+  <button type="button" :class="'ui-button ui-button--' + (variant || 'primary')" :disabled="disabled" @click="$emit('press', $event)"><slot></slot></button>
+</template>
+
+<script>
+export default { props: { variant: String, disabled: Boolean } };
+</script>
+
+<style scoped>
+.ui-button { border: 0; border-radius: .7rem; padding: .7rem 1rem; color: white; cursor: pointer; font: inherit; }
+.ui-button--primary { background: #4135e7; }.ui-button--quiet { background: #27304b; }.ui-button:disabled { cursor: not-allowed; opacity: .5; }
+</style>

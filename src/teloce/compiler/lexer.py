@@ -139,11 +139,6 @@ class Lexer:
         while self.position < len(self.source):
             char = self.current_char()
             
-            # Skip whitespace
-            if char.isspace():
-                self.advance()
-                continue
-            
             # HTML comments
             if char == '<' and self.peek(1) == '!' and self.peek(2) == '-' and self.peek(3) == '-':
                 self._tokenize_comment()
