@@ -7,7 +7,7 @@ validation, and scoping support.
 
 import re
 import hashlib
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 
 from teloce.sfc.component import ComponentStyle
@@ -208,7 +208,6 @@ class CSSParser:
     def _read_value(self) -> Optional[str]:
         """Read a CSS value."""
         start = self.position
-        open_parens = 0
         in_quotes = False
         quote_char = None
         
@@ -379,8 +378,6 @@ class CSSScoper:
         """Scope a single selector part."""
         # Handle complex selectors with combinators
         # Split by combinators: >, +, ~, space
-        import re
-        
         # Tokenize the selector
         tokens = []
         current = ""
@@ -521,9 +518,11 @@ class StyleParser:
         if not source or not source.strip():
             return ComponentStyle(css="", scoped=scoped)
         
-        # Parse CSS to validate
-        parser = CSSParser()
-        stylesheet = parser.parse(source)
+        # Validate with the same parser used by code generation so accepting a
+        # style here cannot later produce a different interpretation.
+        from teloce.css.parser import CSSParser as ProductionCSSParser
+        parser = ProductionCSSParser()
+        parser.parse(source)
         
         if parser.errors:
             self.errors.extend(parser.errors)

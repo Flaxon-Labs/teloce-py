@@ -273,3 +273,14 @@ export default {
         assert result["code"] == ""
         assert result["diagnostics"]["errors"][0]["code"] == "E1000"
         assert "synthetic parser failure" in result["diagnostics"]["errors"][0]["message"]
+
+    def test_javascript_parser_diagnostic_has_location_code_and_suggestion(self):
+        source = '<template><div>Broken</div></template><script>\nexport default { methods: { run() {\n</script>'
+        result = Compiler().compile(source, "Broken.vel")
+        assert result["success"] is False
+        error = next(item for item in result["diagnostics"]["errors"] if "Unclosed delimiter" in item["message"])
+        assert error["filename"] == "Broken.vel"
+        assert error["line"] is not None
+        assert error["column"] is not None
+        assert error["code"] == "E1001"
+        assert error["suggestions"]

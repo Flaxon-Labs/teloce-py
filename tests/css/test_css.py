@@ -98,6 +98,32 @@ class TestCSS:
         assert ".card" in result and ".panel" in result
         assert '[data-label="a,b"]' in result
 
+    def test_scoper_constrains_functional_pseudos_and_colons_inside_attributes(self):
+        scoper = CSSScoper()
+        result = scoper.scope(
+            ':is(.card, .panel), a[href^="https:"]:not(.external) { color: red; }',
+            "data-v-scope",
+        )
+        assert "[data-v-scope]:is(.card, .panel)" in result
+        assert 'a[href^="https:"][data-v-scope]:not(.external)' in result
+
+    def test_parser_preserves_braces_in_attribute_selectors_and_semicolons_in_at_rules(self):
+        source = '@import url("data:text/css;a{}"); [data-value="{x}"] { color: red; }'
+        parser = CSSParser()
+        stylesheet = parser.parse(source)
+        assert not parser.errors
+        assert stylesheet.at_rules[0].value == 'url("data:text/css;a{}")'
+        assert stylesheet.rules[0].selector == '[data-value="{x}"]'
+
+    def test_parser_reports_unclosed_rules_and_at_rules(self):
+        rule_parser = CSSParser()
+        rule_parser.parse(".card { color: red")
+        assert any("Unclosed CSS rule" in error for error in rule_parser.errors)
+
+        media_parser = CSSParser()
+        media_parser.parse("@media (min-width: 1px) { .card { color: red; }")
+        assert any("Unclosed @media" in error for error in media_parser.errors)
+
     def test_parser_and_scoper_preserve_declaration_at_rules(self):
         source = '@font-face { font-family: Demo; src: url("demo.woff2"); }'
         stylesheet = CSSParser().parse(source)

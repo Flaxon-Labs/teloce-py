@@ -4,9 +4,8 @@ CSS Parser - parses CSS stylesheets.
 Converts CSS source into an AST representation.
 """
 
-import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional
 
 
 @dataclass
@@ -127,11 +126,13 @@ class CSSParser:
         self._advance()  # Skip '{'
         
         declarations = []
+        closed = False
         while self.position < len(self.source):
             self._skip_whitespace_and_comments()
             
             if self._peek() == '}':
                 self._advance()
+                closed = True
                 break
             
             decl = self._parse_declaration()
@@ -143,6 +144,9 @@ class CSSParser:
             if self._peek() == ';':
                 self._advance()
         
+        if not closed:
+            self.errors.append(f"Unclosed CSS rule starting at line {start_line}, column {start_col}")
+
         return CSSRule(
             selector=selector.strip(),
             declarations=declarations,
@@ -193,11 +197,32 @@ class CSSParser:
         
         self._skip_whitespace_and_comments()
         
-        # Read the value until '{' or ';'
+        # Read until a top-level block or statement delimiter. Delimiters in
+        # strings and functions (including data URLs) are part of the value.
         value = ""
+        quote = ''
+        escaped = False
+        round_depth = square = 0
         while self.position < len(self.source):
             char = self._peek()
-            if char == '{' or char == ';':
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif quote:
+                if char == quote:
+                    quote = ''
+            elif char in ('"', "'"):
+                quote = char
+            elif char == '(':
+                round_depth += 1
+            elif char == ')':
+                round_depth = max(0, round_depth - 1)
+            elif char == '[':
+                square += 1
+            elif char == ']':
+                square = max(0, square - 1)
+            elif (char == '{' or char == ';') and round_depth == 0 and square == 0:
                 break
             value += char
             self._advance()
@@ -222,10 +247,12 @@ class CSSParser:
             }
 
             if declaration_block:
+                closed = False
                 while self.position < len(self.source):
                     self._skip_whitespace_and_comments()
                     if self._peek() == '}':
                         self._advance()
+                        closed = True
                         break
                     decl = self._parse_declaration()
                     if decl:
@@ -233,6 +260,8 @@ class CSSParser:
                     self._skip_whitespace_and_comments()
                     if self._peek() == ';':
                         self._advance()
+                if not closed:
+                    self.errors.append(f"Unclosed @{name} block starting at line {start_line}, column {start_col}")
                 return CSSAtRule(
                     name=name,
                     value=value,
@@ -241,11 +270,13 @@ class CSSParser:
                     column=start_col,
                 )
             
+            closed = False
             while self.position < len(self.source):
                 self._skip_whitespace_and_comments()
                 
                 if self._peek() == '}':
                     self._advance()
+                    closed = True
                     break
                 
                 # Check for nested at-rule
@@ -260,6 +291,8 @@ class CSSParser:
                 if rule:
                     rules.append(rule)
             
+            if not closed:
+                self.errors.append(f"Unclosed @{name} block starting at line {start_line}, column {start_col}")
             return CSSAtRule(
                 name=name,
                 value=value,
@@ -283,10 +316,29 @@ class CSSParser:
     def _read_selector(self) -> str:
         """Read a CSS selector."""
         start = self.position
-        
+        quote = ''
+        escaped = False
+        square = round_depth = 0
         while self.position < len(self.source):
             char = self._peek()
-            if char == '{':
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif quote:
+                if char == quote:
+                    quote = ''
+            elif char in ('"', "'"):
+                quote = char
+            elif char == '[':
+                square += 1
+            elif char == ']':
+                square = max(0, square - 1)
+            elif char == '(':
+                round_depth += 1
+            elif char == ')':
+                round_depth = max(0, round_depth - 1)
+            elif char == '{' and square == 0 and round_depth == 0:
                 break
             self._advance()
         

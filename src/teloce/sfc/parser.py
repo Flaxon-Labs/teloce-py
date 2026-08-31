@@ -53,6 +53,8 @@ class SFCParser:
         template_ast = template_parser.parse(sections.template, filename)
         if template_parser.errors:
             self.errors.extend(template_parser.errors)
+        if template_parser.warnings:
+            self.warnings.extend(template_parser.warnings)
         
         # Parse script
         script_parser = ScriptParser({"lang": sections.script_lang})
@@ -61,6 +63,8 @@ class SFCParser:
         script.setup = sections.script_setup
         if script_parser.errors:
             self.errors.extend(script_parser.errors)
+        if script_parser.warnings:
+            self.warnings.extend(script_parser.warnings)
         
         # Parse each style block independently so scoped and unscoped blocks
         # retain their own semantics while the legacy ``component.style``
@@ -75,6 +79,8 @@ class SFCParser:
             styles.append(block_style)
             if style_parser.errors:
                 self.errors.extend(style_parser.errors)
+            if style_parser.warnings:
+                self.warnings.extend(style_parser.warnings)
         style = ComponentStyle(
             css="\n".join(block.css for block in styles if block.css),
             scoped=any(block.scoped for block in styles),
@@ -204,10 +210,18 @@ class SFCParser:
 
     @staticmethod
     def _inside_js_literal(source: str, start: int, end: int) -> bool:
-        """Return whether a candidate tag occurs inside a JS string/comment."""
+        """Return whether a candidate tag occurs inside a JS literal/comment.
+
+        This scanner also recognizes regular-expression literals. Without it,
+        a valid pattern such as ``/<\\/script>/`` prematurely ended the SFC's
+        script block.
+        """
         quote = None
+        regex = False
+        regex_class = False
         escaped = False
         line_comment = block_comment = False
+        can_start_regex = True
         index = start
         while index < end:
             char = source[index]
@@ -219,6 +233,18 @@ class SFCParser:
                 if char == '*' and nxt == '/':
                     block_comment = False
                     index += 1
+            elif regex:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == '[':
+                    regex_class = True
+                elif char == ']':
+                    regex_class = False
+                elif char == '/' and not regex_class:
+                    regex = False
+                    can_start_regex = False
             elif quote:
                 if escaped:
                     escaped = False
@@ -226,6 +252,7 @@ class SFCParser:
                     escaped = True
                 elif char == quote:
                     quote = None
+                    can_start_regex = False
             elif char in "'\"`":
                 quote = char
             elif char == '/' and nxt == '/':
@@ -234,8 +261,31 @@ class SFCParser:
             elif char == '/' and nxt == '*':
                 block_comment = True
                 index += 1
+            elif char == '/' and can_start_regex:
+                regex = True
+                regex_class = False
+            elif char.isalpha() or char in '_$':
+                token_start = index
+                index += 1
+                while index < end and (source[index].isalnum() or source[index] in '_$'):
+                    index += 1
+                word = source[token_start:index]
+                can_start_regex = word in {
+                    'return', 'throw', 'case', 'delete', 'void', 'typeof',
+                    'new', 'in', 'of', 'yield', 'await', 'else', 'do',
+                    'instanceof',
+                }
+                continue
+            elif char.isdigit():
+                can_start_regex = False
+            elif char in '([{,;:?=':
+                can_start_regex = True
+            elif char in ')]}':
+                can_start_regex = False
+            elif char in '+-*%&|!<>^~':
+                can_start_regex = True
             index += 1
-        return bool(quote or line_comment or block_comment)
+        return bool(quote or regex or line_comment or block_comment)
 
     @staticmethod
     def _inside_opaque_section(source: str, position: int, target: str) -> bool:

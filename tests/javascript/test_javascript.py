@@ -62,6 +62,18 @@ class TestJavaScript:
         finally:
             path.unlink(missing_ok=True)
 
+    def test_legacy_generator_preserves_async_methods_lifecycle_and_parameters(self):
+        source = '''<template><div>Ready</div></template><script>export default {
+          methods: { async load(url, options = {}) { await fetch(url, options); } },
+          async mounted() { await this.load("/api"); },
+          async errorCaptured(error, instance, info) { await Promise.resolve(error); }
+        };</script>'''
+        component = SFCParser().parse(source, "AsyncLegacy.vel")
+        code = JavaScriptGenerator({"mount": False}).generate(component.template, component)
+        assert "async load(url, options = {})" in code
+        assert "async mounted()" in code
+        assert "async errorCaptured(error, instance, info)" in code
+
     def test_embedded_signal_helpers_execute_public_api(self):
         source = HelperGenerator().generate_all_helpers() + """
 const count = createSignal(1); let seen = 0;

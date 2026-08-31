@@ -4,8 +4,11 @@ Plugin API - provides the plugin interface.
 Defines the plugin API and base plugin class.
 """
 
-from typing import Dict, Any, Optional, Callable, List
-from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Dict, Any, Optional, Callable, List
+from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from teloce.plugins.registry import PluginRegistry
 
 
 @dataclass
@@ -45,6 +48,10 @@ class PluginAPI:
         if isinstance(name, dict):
             directive = name
             name = name.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Directive name must be a non-empty string")
+        if directive is None:
+            raise ValueError(f"Directive {name!r} must provide an implementation")
         self._directives[name] = directive
 
     def unregister_directive(self, name: str) -> None:
@@ -56,10 +63,18 @@ class PluginAPI:
             filter_definition = name
             name = filter_definition.get("name", "")
             filter_func = filter_definition.get("transform", filter_definition.get("filter"))
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Filter name must be a non-empty string")
+        if not callable(filter_func):
+            raise TypeError(f"Filter {name!r} must be callable")
         self._filters[name] = filter_func
 
     def register_js_filter(self, name: str, source: str) -> None:
         """Register a filter implementation that can run in generated JS."""
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("JavaScript filter name must be a non-empty string")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError(f"JavaScript filter {name!r} must provide source code")
         self._filters[name] = {"js": source}
 
     def unregister_filter(self, name: str) -> None:
@@ -71,6 +86,10 @@ class PluginAPI:
             component_definition = name
             name = component_definition.get("name", "")
             component = component_definition.get("component", component_definition)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Component name must be a non-empty string")
+        if component is None:
+            raise ValueError(f"Component {name!r} must provide an implementation")
         self._components[name] = component
 
     def unregister_component(self, name: str) -> None:
@@ -78,6 +97,10 @@ class PluginAPI:
     
     def register_hook(self, name: str, hook_func: Callable, priority: int = 0) -> None:
         """Register a hook."""
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Hook name must be a non-empty string")
+        if not callable(hook_func):
+            raise TypeError(f"Hook {name!r} must be callable")
         if name not in self._hooks:
             self._hooks[name] = []
         self._hooks[name].append((priority, hook_func))

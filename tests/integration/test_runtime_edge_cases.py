@@ -18,6 +18,8 @@ export default {
     assert result["success"]
     assert "data-teloce-loop-scope" in result["code"]
     assert "eventScope" in result["code"]
+    assert "loopScopes.set" in result["code"]
+    assert 'JSON.parse(element.getAttribute("data-teloce-loop-scope")' not in result["code"]
 
 
 def test_generated_components_wrap_nested_objects_and_arrays_reactively():

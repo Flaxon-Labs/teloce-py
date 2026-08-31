@@ -33,18 +33,22 @@ def _stable_chrome_run(command, *args, **kwargs):
         "--disable-sync",
         "--disable-background-networking",
         "--disable-component-update",
+        "--disable-crash-reporter",
+        "--disable-breakpad",
         "--no-first-run",
         "--no-default-browser-check",
     ):
         if flag not in command:
             command.insert(1, flag)
-    kwargs["timeout"] = min(kwargs.get("timeout", 60), 30)
+    kwargs["timeout"] = min(kwargs.get("timeout", 60), 60)
     failure = None
     for _attempt in range(3):
         # A timed-out Chrome process can keep its profile lock and continue
         # consuming resources on Windows.  Give every attempt an isolated
         # profile and explicitly reap the process before retrying.
-        with tempfile.TemporaryDirectory(prefix="teloce-chrome-") as profile:
+        profile = Path(tempfile.mkdtemp(prefix="teloce-chrome-"))
+        process = None
+        try:
             attempt_command = [arg for arg in command if not str(arg).startswith("--user-data-dir=")]
             attempt_command.append(f"--user-data-dir={profile}")
             run_kwargs = dict(kwargs)
@@ -64,6 +68,30 @@ def _stable_chrome_run(command, *args, **kwargs):
                 else:
                     process.kill()
                 process.communicate()
+        finally:
+            if process is not None and process.poll() is None:
+                if os.name == "nt":
+                    _subprocess_run(
+                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    process.kill()
+                process.communicate()
+            # Chrome can briefly retain cache-file handles after its headless
+            # parent exits on Windows. Cleanup is best-effort test hygiene and
+            # must never turn a successful browser assertion into a failure.
+            for _cleanup_attempt in range(20):
+                try:
+                    shutil.rmtree(profile)
+                    break
+                except FileNotFoundError:
+                    break
+                except PermissionError:
+                    time.sleep(0.1)
+            else:
+                shutil.rmtree(profile, ignore_errors=True)
     raise failure
 
 

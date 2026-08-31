@@ -194,7 +194,7 @@ def create_flask_template(project_path: Path) -> None:
     
     # Create requirements.txt
     (project_path / 'requirements.txt').write_text(
-        "teloce-py>=0.2.0b1\nflask>=2.3.0\n"
+        "teloce-py>=0.2.4\nflask>=2.3.0\n"
     )
 
 
@@ -275,7 +275,7 @@ if __name__ == '__main__':
 <!doctype html><html><body><div id="app"></div><script type="module">import { mount } from "{{ url_for('static', path='js/App.js') }}"; mount('#app');</script></body></html>
 """.strip())
     (project_path / 'requirements.txt').write_text("""
-teloce-py>=0.2.0b1
+teloce-py>=0.2.4
 fastapi>=0.100.0
 uvicorn>=0.23.0
 jinja2>=3.1.0
@@ -338,7 +338,7 @@ if __name__ == "__main__":
 </html>
 '''.strip())
     (project_path / 'requirements.txt').write_text(
-        "teloce-py>=0.2.0b1\nflaxon>=0.2,<1\n"
+        "teloce-py>=0.2.4\nflaxon>=0.2,<1\n"
     )
 
 

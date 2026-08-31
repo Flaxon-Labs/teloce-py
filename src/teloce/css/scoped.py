@@ -5,8 +5,8 @@ Adds unique scope attributes to CSS selectors for component isolation.
 """
 
 import re
-from typing import List, Optional, Set, Tuple
-from teloce.css.parser import CSSParser, CSSRule, CSSAtRule, CSSStylesheet, CSSDeclaration
+from typing import List, Optional
+from teloce.css.parser import CSSParser, CSSAtRule, CSSDeclaration
 
 
 class CSSScoper:
@@ -140,39 +140,83 @@ class CSSScoper:
         if slotted:
             return f'[{scope_id}] > {slotted.group(1).strip()}'
 
-        # Handle pseudo-classes and pseudo-elements
-        # Split by : but keep the base selector
-        
-        # Find the base selector (before any pseudo-class)
-        base_match = re.match(r'^([^:]+)', selector)
-        if not base_match:
-            return selector
-        
-        base = base_match.group(1)
-        pseudo = selector[len(base):]
-        
-        if not base or base == '':
-            # Empty base, just add attribute
-            return f"[{scope_id}]{pseudo}"
-        
-        # Check if selector is a tag with no class or id
-        if re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', base):
-            # Simple tag selector
-            return f"{base}[{scope_id}]{pseudo}"
-        
-        # Check for class or id selectors
-        if '.' in base or '#' in base:
-            # Find the element part (before class or id)
-            match = re.match(r'^([a-zA-Z][a-zA-Z0-9]*)?([.#][^.#]+)*$', base)
-            if match:
-                element = match.group(1) or ''
-                if element:
-                    return f"{element}[{scope_id}]{base[len(element):]}{pseudo}"
-                else:
-                    return f"{base}[{scope_id}]{pseudo}"
-        
-        # Default: add attribute to the end of the selector
-        return f"{base}[{scope_id}]{pseudo}"
+        pseudo_at = self._first_top_level_pseudo(selector)
+        base = selector[:pseudo_at] if pseudo_at is not None else selector
+        pseudo = selector[pseudo_at:] if pseudo_at is not None else ''
+
+        # Scope the last compound selector. This uniformly handles type,
+        # class, ID, universal, and attribute selectors and also constrains
+        # selectors beginning with :is/:where/:not.
+        split_at = self._last_top_level_combinator(base)
+        prefix = base[:split_at] if split_at is not None else ''
+        compound = base[split_at:] if split_at is not None else base
+        if not compound.strip():
+            return f"{prefix}[{scope_id}]{pseudo}"
+        trailing = len(compound) - len(compound.rstrip())
+        whitespace = compound[len(compound) - trailing:] if trailing else ''
+        compound = compound.rstrip()
+        return f"{prefix}{compound}[{scope_id}]{whitespace}{pseudo}"
+
+    @staticmethod
+    def _first_top_level_pseudo(selector: str) -> Optional[int]:
+        quote = ''
+        escaped = False
+        square = round_depth = 0
+        for index, character in enumerate(selector):
+            if escaped:
+                escaped = False
+                continue
+            if character == '\\':
+                escaped = True
+                continue
+            if quote:
+                if character == quote:
+                    quote = ''
+                continue
+            if character in "'\"":
+                quote = character
+            elif character == '[':
+                square += 1
+            elif character == ']':
+                square = max(0, square - 1)
+            elif character == '(':
+                round_depth += 1
+            elif character == ')':
+                round_depth = max(0, round_depth - 1)
+            elif character == ':' and square == 0 and round_depth == 0:
+                return index
+        return None
+
+    @staticmethod
+    def _last_top_level_combinator(selector: str) -> Optional[int]:
+        quote = ''
+        escaped = False
+        square = round_depth = 0
+        boundary: Optional[int] = None
+        for index, character in enumerate(selector):
+            if escaped:
+                escaped = False
+                continue
+            if character == '\\':
+                escaped = True
+                continue
+            if quote:
+                if character == quote:
+                    quote = ''
+                continue
+            if character in "'\"":
+                quote = character
+            elif character == '[':
+                square += 1
+            elif character == ']':
+                square = max(0, square - 1)
+            elif character == '(':
+                round_depth += 1
+            elif character == ')':
+                round_depth = max(0, round_depth - 1)
+            elif square == 0 and round_depth == 0 and (character.isspace() or character in '>+~'):
+                boundary = index + 1
+        return boundary
     
     def _scope_at_rule(self, at_rule: CSSAtRule, scope_id: str) -> Optional[str]:
         """Scope an at-rule."""

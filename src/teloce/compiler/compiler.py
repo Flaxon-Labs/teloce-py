@@ -10,10 +10,9 @@ This module coordinates the entire compilation pipeline:
 """
 
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
+import re
 
-from teloce.compiler.lexer import Lexer, Token
-from teloce.compiler.parser import Parser
 from teloce.compiler.transformer import Transformer
 from teloce.compiler.optimizer import Optimizer
 from teloce.compiler.generator import Generator
@@ -85,17 +84,44 @@ class Compiler:
         # Step 1: Parse SFC
         sfc_parser = SFCParser()
         component = sfc_parser.parse(source, filename)
+
+        for warning in sfc_parser.warnings:
+            line, column = self._message_location(warning)
+            self.diagnostics.add(
+                DiagnosticLevel.WARNING,
+                warning,
+                filename=filename,
+                line=line,
+                column=column,
+                code="W1001",
+            )
         
         if not component:
             for error in sfc_parser.errors:
-                self.diagnostics.add(DiagnosticLevel.ERROR, error, filename=filename)
-            for warning in sfc_parser.warnings:
-                self.diagnostics.add(DiagnosticLevel.WARNING, warning, filename=filename)
-            self.diagnostics.add(
-                DiagnosticLevel.ERROR,
-                "Failed to parse SFC",
-                filename=filename
-            )
+                line, column = self._message_location(error)
+                suggestions = []
+                if "Unclosed delimiter" in error:
+                    suggestions.append("Close the reported JavaScript delimiter before compiling again.")
+                elif "Missing <template>" in error:
+                    suggestions.append("Add one <template>...</template> block to the component.")
+                elif "Only one <" in error:
+                    suggestions.append("Keep one block of this type and merge or remove the duplicate.")
+                self.diagnostics.add(
+                    DiagnosticLevel.ERROR,
+                    error,
+                    filename=filename,
+                    line=line,
+                    column=column,
+                    code="E1001",
+                    suggestions=suggestions,
+                )
+            if not sfc_parser.errors:
+                self.diagnostics.add(
+                    DiagnosticLevel.ERROR,
+                    "Failed to parse SFC",
+                    filename=filename,
+                    code="E1001",
+                )
             return self._empty_result()
 
         # SFCParser already lexes and parses the template. Keeping one
@@ -165,6 +191,14 @@ class Compiler:
             if result is not None:
                 value = result
         return value
+
+    @staticmethod
+    def _message_location(message: str) -> tuple[Optional[int], Optional[int]]:
+        """Extract source coordinates emitted by the JS/template parsers."""
+        match = re.search(r"\bline\s+(\d+)(?:,\s*column\s+(\d+))?", message, re.IGNORECASE)
+        if not match:
+            return None, None
+        return int(match.group(1)), int(match.group(2)) if match.group(2) else None
 
     def _generate_css(self, component: Component) -> str:
         """Generate CSS from component styles."""

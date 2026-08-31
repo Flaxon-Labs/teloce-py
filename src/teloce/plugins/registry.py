@@ -4,7 +4,7 @@ Plugin registry - manages registered plugins.
 Provides plugin registration, discovery, and management.
 """
 
-from typing import Dict, List, Optional, Any, Type, Callable
+from typing import Dict, List, Optional, Any, Callable
 from teloce.plugins.api import Plugin, PluginAPI
 
 
@@ -26,7 +26,16 @@ class PluginRegistry:
         # those already-registered plugins receive their install lifecycle.
         for plugin in self._plugins.values():
             if not getattr(plugin, '_teloce_installed', False):
-                plugin.install(api)
+                try:
+                    plugin.install(api)
+                except Exception:
+                    # Give a partially installed plugin a chance to unregister
+                    # anything it added before propagating the install error.
+                    try:
+                        plugin.uninstall()
+                    finally:
+                        setattr(plugin, '_teloce_installed', False)
+                    raise
                 setattr(plugin, '_teloce_installed', True)
     
     def get_api(self) -> Optional[PluginAPI]:
@@ -44,12 +53,18 @@ class PluginRegistry:
             # Plugin already registered, skip
             return
         
-        self._plugins[plugin.name] = plugin
-        
         # Install the plugin
         if self._api:
-            plugin.install(self._api)
+            try:
+                plugin.install(self._api)
+            except Exception:
+                try:
+                    plugin.uninstall()
+                finally:
+                    setattr(plugin, '_teloce_installed', False)
+                raise
             setattr(plugin, '_teloce_installed', True)
+        self._plugins[plugin.name] = plugin
     
     def unregister(self, name: str) -> bool:
         """
@@ -63,7 +78,9 @@ class PluginRegistry:
         """
         plugin = self._plugins.pop(name, None)
         if plugin:
-            plugin.uninstall()
+            if getattr(plugin, '_teloce_installed', False):
+                plugin.uninstall()
+                setattr(plugin, '_teloce_installed', False)
             return True
         return False
     
@@ -82,7 +99,9 @@ class PluginRegistry:
     def clear(self) -> None:
         """Clear all plugins."""
         for plugin in list(self._plugins.values()):
-            plugin.uninstall()
+            if getattr(plugin, '_teloce_installed', False):
+                plugin.uninstall()
+                setattr(plugin, '_teloce_installed', False)
         self._plugins.clear()
     
     def get_directives(self) -> Dict[str, Any]:

@@ -20,7 +20,11 @@ class ComponentScript:
     computed: Dict[str, str] = field(default_factory=dict)
     props: Dict[str, Any] = field(default_factory=dict)
     lifecycle: Dict[str, str] = field(default_factory=dict)
+    lifecycle_params: Dict[str, str] = field(default_factory=dict)
+    lifecycle_async: Dict[str, bool] = field(default_factory=dict)
     watch: Dict[str, str] = field(default_factory=dict)
+    watch_params: Dict[str, str] = field(default_factory=dict)
+    watch_async: Dict[str, bool] = field(default_factory=dict)
     emits: List[str] = field(default_factory=list)
     name: Optional[str] = None
     raw: str = ""

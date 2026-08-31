@@ -1,5 +1,9 @@
 """Production SFC contract tests."""
 
+import subprocess
+import tempfile
+from pathlib import Path
+
 from teloce.compiler.compiler import compile
 from teloce.sfc.parser import SFCParser, parse_sfc_result
 
@@ -42,6 +46,15 @@ def test_duplicate_template_is_rejected():
     )
     assert component is None
     assert any("Only one <template>" in error for error in parser.errors)
+
+
+def test_unclosed_component_css_is_a_compile_error():
+    result = compile(
+        "<template><div>Broken</div></template><style scoped>.card { color: red</style>",
+        "BrokenStyle.vel",
+    )
+    assert result["success"] is False
+    assert any("Unclosed CSS rule" in error["message"] for error in result["diagnostics"]["errors"])
 
 
 def test_scoped_css_is_installed_by_the_generated_component():
@@ -110,6 +123,20 @@ def test_sfc_sections_handle_nested_templates_quoted_attributes_and_script_strin
     assert "Ready" in repr(component.template)
 
 
+def test_sfc_script_section_ignores_closing_tag_text_inside_regex_literals():
+    source = r'''
+<template><div>Ready</div></template>
+<script>
+const closingTag = /<\/script>/i;
+export default { methods: { matches(value) { return closingTag.test(value); } } };
+</script>
+'''
+    result = compile(source, "RegexSection.vel", source_maps=False)
+    assert result["success"], result["diagnostics"]
+    assert "closingTag" in result["code"]
+    assert "matches(value)" in result["code"]
+
+
 def test_nested_prop_definitions_and_validators_are_preserved():
     source = '''
 <template><div>{{ title }}</div></template>
@@ -123,6 +150,34 @@ def test_nested_prop_definitions_and_validators_are_preserved():
     result = compile(source, "Props.vel")
     assert result["success"] is True
     assert "validator" in result["code"]
+
+
+def test_prop_factories_arrays_and_validator_functions_are_emitted_as_code():
+    source = r'''
+<template><div>{{ settings.tags.length }}</div></template>
+<script>export default { props: {
+  settings: {
+    type: Object,
+    default: () => ({ tags: ["a,b"], nested: { ready: true } }),
+    validator: value => /}/.test("}") && Array.isArray(value.tags)
+  },
+  mode: { type: [String, Number], required: true }
+} };</script>
+'''
+    result = compile(source, "PropFactories.vel", source_maps=False)
+    assert result["success"], result["diagnostics"]
+    assert 'defaultFactory: (() => ({ tags: ["a,b"], nested: { ready: true } }))' in result["code"]
+    assert 'validator: (value => /}/.test("}")' in result["code"]
+    assert 'type: "String|Number"' in result["code"]
+
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", encoding="utf-8", delete=False) as handle:
+        handle.write(result["code"])
+        path = Path(handle.name)
+    try:
+        checked = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+        assert checked.returncode == 0, checked.stderr
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def test_common_typescript_sfc_annotations_are_transpiled_to_valid_javascript():
@@ -190,3 +245,80 @@ export default { data() { return { status: Status.Ready }; } };
     assert result["success"]
     assert "const Status = {Idle: 0, Ready: \"ready\"};" in result["code"] or "const Status = {Idle: 0, Ready: 'ready'};" in result["code"]
     assert "enum Status" not in result["code"]
+
+
+def test_async_lifecycle_hooks_and_watchers_remain_async_javascript():
+    source = '''
+<template><div>{{ status }}</div></template>
+<script>
+export default {
+  data() { return { status: "loading" }; },
+  async created() { await Promise.resolve(); this.status = "created"; },
+  async mounted() { await Promise.resolve(); this.status = "mounted"; },
+  async updated() { await Promise.resolve(); },
+  async errorCaptured(error, instance, info) { await Promise.resolve(error); return false; },
+  watch: {
+    status: async function(newValue, oldValue) { await Promise.resolve(newValue); }
+  }
+};
+</script>
+'''
+    result = compile(source, "AsyncLifecycle.vel", source_maps=False)
+    assert result["success"], result["diagnostics"]
+    assert "async created()" in result["code"]
+    assert "async mounted()" in result["code"]
+    assert "async updated()" in result["code"]
+    assert "async errorCaptured(error, instance, info)" in result["code"]
+    assert 'async "status"(newValue, oldValue)' in result["code"]
+
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", encoding="utf-8", delete=False) as handle:
+        handle.write(result["code"])
+        path = Path(handle.name)
+    try:
+        checked = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+        assert checked.returncode == 0, checked.stderr
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_option_parser_ignores_helpers_and_preserves_lexically_complex_methods():
+    source = r'''
+<template><button @click="check">{{ value }}</button></template>
+<script>
+const helper = { async mounted() { throw new Error("not the component hook"); } };
+export default {
+  data() { return { value: "start" }; },
+  methods: {
+    check: async function(input = /}/) {
+      const message = `value ${input.test("}") ? "yes" : "no"}`;
+      await Promise.resolve(message);
+      this.value = message;
+    },
+    empty() {}
+  },
+  mounted: async function() { await this.check(); },
+  watch: {
+    "value.current": {
+      async handler(newValue, oldValue) { await Promise.resolve({newValue, oldValue}); },
+      deep: true
+    }
+  }
+};
+</script>
+'''
+    result = compile(source, "LexicalOptions.vel", source_maps=False)
+    assert result["success"], result["diagnostics"]
+    assert "async check(input = /}/)" in result["code"]
+    assert "empty()" in result["code"]
+    assert "this.check" in result["component"].script.lifecycle["mounted"]
+    assert "not the component hook" not in result["component"].script.lifecycle["mounted"]
+    assert 'async "value.current"(newValue, oldValue)' in result["code"]
+
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", encoding="utf-8", delete=False) as handle:
+        handle.write(result["code"])
+        path = Path(handle.name)
+    try:
+        checked = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+        assert checked.returncode == 0, checked.stderr
+    finally:
+        path.unlink(missing_ok=True)

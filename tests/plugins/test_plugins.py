@@ -123,3 +123,45 @@ class TestPlugins:
         assert result["success"] is True
         assert "Hooked" in result["code"]
         assert "plugin-complete" in result["code"]
+
+    def test_plugin_api_rejects_invalid_registrations(self):
+        api = PluginAPI(PluginRegistry())
+        with pytest.raises(ValueError):
+            api.register_directive("", {})
+        with pytest.raises(TypeError):
+            api.register_filter("broken", None)
+        with pytest.raises(ValueError):
+            api.register_js_filter("browser", "")
+        with pytest.raises(TypeError):
+            api.register_hook("compile", "not callable")
+
+    def test_failed_plugin_install_is_not_left_registered(self):
+        registry = PluginRegistry()
+        api = PluginAPI(registry)
+        registry.set_api(api)
+
+        class BrokenPlugin(Plugin):
+            def install(self, api):
+                api.register_filter("temporary", lambda value: value)
+                self.api = api
+                raise RuntimeError("install failed")
+
+            def uninstall(self):
+                self.api.unregister_filter("temporary")
+
+        with pytest.raises(RuntimeError, match="install failed"):
+            registry.register(BrokenPlugin(name="broken"))
+        assert not registry.has("broken")
+        assert api.get_filter("temporary") is None
+
+    def test_uninstall_is_not_called_for_a_plugin_that_was_never_installed(self):
+        calls = []
+
+        class DeferredPlugin(Plugin):
+            def uninstall(self):
+                calls.append("uninstall")
+
+        registry = PluginRegistry()
+        registry.register(DeferredPlugin(name="deferred"))
+        assert registry.unregister("deferred") is True
+        assert calls == []

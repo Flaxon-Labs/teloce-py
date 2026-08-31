@@ -4,8 +4,9 @@ Router compiler - compiles router configuration.
 Parses and validates router configuration for client-side routing.
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
+import re
 
 
 @dataclass
@@ -94,6 +95,9 @@ class RouterCompiler:
         routes = []
         
         for route_data in routes_data:
+            if not isinstance(route_data, dict):
+                self.errors.append("Each route must be an object")
+                continue
             path = route_data.get('path', '')
             component = route_data.get('component', '')
             name = route_data.get('name')
@@ -102,8 +106,26 @@ class RouterCompiler:
             props = route_data.get('props', False)
             redirect = route_data.get('redirect')
             
-            if not path:
+            if not isinstance(path, str) or not path:
                 self.errors.append("Route missing 'path' field")
+                continue
+            if component and (not isinstance(component, str) or not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*', component)):
+                self.errors.append(f"Route '{path}' has an invalid JavaScript component reference")
+                continue
+            if redirect is not None and not isinstance(redirect, str):
+                self.errors.append(f"Route '{path}' redirect must be a string")
+                continue
+            if name is not None and not isinstance(name, str):
+                self.errors.append(f"Route '{path}' name must be a string")
+                continue
+            if not isinstance(children_data, list):
+                self.errors.append(f"Route '{path}' children must be a list")
+                continue
+            if not isinstance(meta, dict):
+                self.errors.append(f"Route '{path}' meta must be an object")
+                continue
+            if not isinstance(props, bool):
+                self.errors.append(f"Route '{path}' props must be a boolean")
                 continue
             
             if not component and not redirect:
@@ -137,10 +159,16 @@ class RouterCompiler:
         
         return routes
     
-    def _validate_routes(self, routes: List[Route], parent_path: str = "") -> None:
+    def _validate_routes(
+        self,
+        routes: List[Route],
+        parent_path: str = "",
+        names: Optional[set] = None,
+        paths: Optional[set] = None,
+    ) -> None:
         """Validate routes for common issues."""
-        names = set()
-        paths = set()
+        names = names if names is not None else set()
+        paths = paths if paths is not None else set()
         for route in routes:
             if route.name:
                 if route.name in names:
@@ -154,7 +182,7 @@ class RouterCompiler:
             
             # Validate children
             if route.children:
-                self._validate_routes(route.children, route.path)
+                self._validate_routes(route.children, route.path, names, paths)
     
     def has_errors(self) -> bool:
         """Check if there are compilation errors."""

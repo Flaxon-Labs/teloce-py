@@ -4,14 +4,12 @@ Lint command - lints Teloce templates.
 Lints .vel files for issues and potential problems.
 """
 
-import sys
 import re
 import copy
 from pathlib import Path
 from typing import Any, List, Dict
 
 from teloce.project.discovery import ProjectDiscovery
-from teloce.compiler.diagnostics import Diagnostics, DiagnosticLevel
 from teloce.sfc.parser import SFCParser
 
 
@@ -30,7 +28,7 @@ def lint_command(args: Any) -> int:
     
     # Discover project
     discovery = ProjectDiscovery()
-    project_info = discovery.discover()
+    discovery.discover()
     
     print(f"📁 Project: {discovery.get_project_name()}")
     
@@ -99,8 +97,21 @@ def apply_lint_fixes(file_path: Path, issues: List[Dict[str, Any]]) -> bool:
     if 'For loop missing "key" attribute' in issue_messages:
         def add_index_key(match: re.Match[str]) -> str:
             tag = match.group(0)
-            return tag if re.search(r'\bkey\s*=', tag, re.IGNORECASE) else tag[:-1] + ' key="index">'
+            return tag if re.search(r'(?:^|\s)(?::|v-bind:)?key\s*=', tag, re.IGNORECASE) else tag[:-1] + ' key="index">'
         updated = re.sub(r'<for\b[^>]*>', add_index_key, updated, flags=re.IGNORECASE)
+
+        def add_v_for_key(match: re.Match[str]) -> str:
+            tag = match.group(0)
+            if re.search(r'(?:^|\s)(?::|v-bind:)?key\s*=', tag, re.IGNORECASE):
+                return tag
+            return tag[:-1] + ' :key="index">'
+
+        updated = re.sub(
+            r'<(?!for\b)[A-Za-z][^>]*\bv-for\s*=\s*(?:"[^"]*"|\'[^\']*\')[^>]*>',
+            add_v_for_key,
+            updated,
+            flags=re.IGNORECASE,
+        )
 
     if any(message.startswith('Found ') and 'empty interpolations' in message for message in issue_messages):
         updated = re.sub(r'\{\{\s*\}\}', '', updated)
@@ -168,9 +179,16 @@ def lint_file(file_path: Path, args: Any) -> List[Dict[str, Any]]:
         template = template_match.group(1)
         
         # Check for for loops without key
-        for_match = re.findall(r'<for[^>]*>', template)
+        for_match = re.findall(r'<for\b[^>]*>', template, flags=re.IGNORECASE)
+        for_match.extend(
+            re.findall(
+                r'<(?!for\b)[A-Za-z][^>]*\bv-for\s*=\s*(?:"[^"]*"|\'[^\']*\')[^>]*>',
+                template,
+                flags=re.IGNORECASE,
+            )
+        )
         for tag in for_match:
-            if 'key=' not in tag:
+            if not re.search(r'(?:^|\s)(?::|v-bind:)?key\s*=', tag, re.IGNORECASE):
                 line = content.count('\n', 0, content.find(tag)) + 1
                 issues.append({
                     'file': str(file_path),

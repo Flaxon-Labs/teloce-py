@@ -4,8 +4,8 @@ Hooks plugin - plugin for lifecycle hooks.
 Provides a plugin for adding lifecycle hooks to Teloce.
 """
 
-from typing import Dict, List, Callable, Optional
-from dataclasses import dataclass, field
+from typing import Any, Dict, List, Callable
+from dataclasses import dataclass
 from teloce.plugins.api import Plugin, PluginAPI
 
 

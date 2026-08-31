@@ -7,7 +7,7 @@ Generates complete JavaScript code from component AST.
 from typing import List, Optional, Dict, Any
 from teloce.ast.nodes import (
     ASTNode, ElementNode, TextNode, InterpolationNode,
-    ForNode, IfNode, EventNode, BindingNode,
+    ForNode, IfNode,
     ComponentNode, SlotNode, FragmentNode
 )
 from teloce.sfc.component import Component
@@ -118,7 +118,9 @@ class JavaScriptGenerator:
             lines.append(f'{self._indent()}methods: {{')
             self.indent_level += 1
             for name, body in component.script.methods.items():
-                lines.append(f'{self._indent()}{name}() {{')
+                params = getattr(component.script, "method_params", {}).get(name, "")
+                prefix = "async " if getattr(component.script, "method_async", {}).get(name, False) else ""
+                lines.append(f'{self._indent()}{prefix}{name}({params}) {{')
                 self.indent_level += 1
                 for line in body.split('\n'):
                     if line.strip():
@@ -132,7 +134,9 @@ class JavaScriptGenerator:
         # Lifecycle hooks
         if component.script.lifecycle:
             for hook, body in component.script.lifecycle.items():
-                lines.append(f'{self._indent()}{hook}() {{')
+                params = getattr(component.script, "lifecycle_params", {}).get(hook, "")
+                prefix = "async " if getattr(component.script, "lifecycle_async", {}).get(hook, False) else ""
+                lines.append(f'{self._indent()}{prefix}{hook}({params}) {{')
                 self.indent_level += 1
                 for line in body.split('\n'):
                     if line.strip():

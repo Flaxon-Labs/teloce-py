@@ -270,7 +270,7 @@ class Generator:
             lines.append('')
 
         if component.script.props:
-            lines.append(f'{self._indent()}props: {json.dumps(component.script.props)},')
+            lines.append(f'{self._indent()}props: {self._generate_props(component.script.props)},')
             lines.append('')
         
         # Computed
@@ -291,7 +291,9 @@ class Generator:
 
         if getattr(component.script, "lifecycle", {}):
             for hook_name, hook_code in component.script.lifecycle.items():
-                lines.append(f'{self._indent()}{hook_name}() {{')
+                params = getattr(component.script, "lifecycle_params", {}).get(hook_name, "")
+                prefix = "async " if getattr(component.script, "lifecycle_async", {}).get(hook_name, False) else ""
+                lines.append(f'{self._indent()}{prefix}{hook_name}({params}) {{')
                 self.indent_level += 1
                 for line in hook_code.split('\n'):
                     if line.strip():
@@ -304,7 +306,9 @@ class Generator:
             lines.append(f'{self._indent()}watch: {{')
             self.indent_level += 1
             for watch_name, watch_code in component.script.watch.items():
-                lines.append(f'{self._indent()}{watch_name}(newValue, oldValue) {{')
+                params = getattr(component.script, "watch_params", {}).get(watch_name, "newValue, oldValue")
+                prefix = "async " if getattr(component.script, "watch_async", {}).get(watch_name, False) else ""
+                lines.append(f'{self._indent()}{prefix}{json.dumps(watch_name)}({params}) {{')
                 self.indent_level += 1
                 for line in watch_code.split('\n'):
                     if line.strip():
@@ -367,6 +371,28 @@ class Generator:
                 "module": style.module,
             }).generate(style.css, component.name))
         return "\n".join(css for css in generated if css)
+
+    @staticmethod
+    def _generate_props(props: dict) -> str:
+        """Emit prop metadata without turning validator/factory code into text."""
+        entries = []
+        for name, definition in props.items():
+            definition = definition or {}
+            default_source = definition.get("default")
+            validator_source = definition.get("validator")
+            fields = [
+                f'type: {json.dumps(definition.get("type"))}',
+                f'required: {str(bool(definition.get("required"))).lower()}',
+                f'default: {json.dumps(default_source)}',
+            ]
+            if default_source and re.match(r'^\s*(?:async\s+)?(?:function\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)', default_source):
+                fields.append(f'defaultFactory: ({default_source})')
+            if validator_source:
+                fields.append(f'validator: ({validator_source})')
+            else:
+                fields.append('validator: null')
+            entries.append(f'{json.dumps(name)}: {{ {", ".join(fields)} }}')
+        return '{ ' + ', '.join(entries) + ' }'
 
     def _generate_js_filters(self) -> str:
         """Serialize explicitly supplied browser filter implementations."""
@@ -478,11 +504,9 @@ class Generator:
         template_literal = json.dumps(template_code, ensure_ascii=False)
         style_literal = json.dumps(style_code, ensure_ascii=False)
         style_classes_literal = json.dumps(self.module_mapping, ensure_ascii=False)
-        data = component.script_data or "{}"
         imports = self._component_imports(component)
         component_map = ', '.join(f'{json.dumps(name)}: {name}' for name in imports)
         custom_filters = self._generate_js_filters()
-        filter_suffix = f", {custom_filters}" if custom_filters else ""
         shared_runtime_import = self.options.get("shared_runtime_import")
         runtime = [
             *([] if shared_runtime_import else [SAFE_EXPRESSION_RUNTIME]),
@@ -508,8 +532,8 @@ class Generator:
             'const __registerHmr = record => { if (!__moduleUrl) return; if (!__hmrRegistry.has(__moduleUrl)) __hmrRegistry.set(__moduleUrl, new Set()); __hmrRegistry.get(__moduleUrl).add(record); };',
             'const __unregisterHmr = record => { const records = __hmrRegistry.get(__moduleUrl); records?.delete(record); if (records?.size === 0) __hmrRegistry.delete(__moduleUrl); };',
             'if (typeof globalThis !== "undefined" && !globalThis.__teloce_hmr_reload) globalThis.__teloce_hmr_reload = async () => { const records = [...__hmrRegistry.values()].flatMap(set => [...set]); for (const record of records) await record.reload(); };',
-            f'const __initialData = {data};',
-            'const __normalizeProps = (input) => { const output = { ...input }; for (const [name, definition] of Object.entries(__component.props || {})) { if (output[name] === undefined && definition?.type === "Boolean") output[name] = false; if (output[name] === undefined && definition && definition.default !== null && definition.default !== undefined) { try { output[name] = __safeEvaluate(String(definition.default), {}); } catch (_) {} } if (__dev && definition?.required && output[name] === undefined) console.warn(`Missing required prop: ${name}`); if (__dev && definition?.type && output[name] !== undefined) { const expected = String(definition.type).split("|"); const actual = output[name]?.constructor?.name; if (!expected.includes(actual)) console.warn(`Invalid prop type for ${name}: expected ${definition.type}, got ${actual}`); } if (definition?.validator && typeof definition.validator === "function" && output[name] !== undefined) { try { const valid = definition.validator(output[name]); if (__dev && !valid) console.warn(`Invalid prop value for ${name}`); } catch (error) { if (__dev) console.warn(`Prop validator failed for ${name}`, error); } } } return output; };',
+            'const __createInitialData = () => (__component.data ? __component.data() : {});',
+            'const __normalizeProps = (input) => { const output = { ...input }; for (const [name, definition] of Object.entries(__component.props || {})) { if (output[name] === undefined && definition?.type === "Boolean") output[name] = false; if (output[name] === undefined && definition) { if (typeof definition.defaultFactory === "function") { try { output[name] = definition.defaultFactory(); } catch (error) { if (__dev) console.warn(`Prop default factory failed for ${name}`, error); } } else if (definition.default !== null && definition.default !== undefined) { try { output[name] = __safeEvaluate(String(definition.default), {}); } catch (_) {} } } if (__dev && definition?.required && output[name] === undefined) console.warn(`Missing required prop: ${name}`); if (__dev && definition?.type && output[name] !== undefined) { const expected = String(definition.type).split("|"); const actual = output[name]?.constructor?.name; if (!expected.includes(actual)) console.warn(`Invalid prop type for ${name}: expected ${definition.type}, got ${actual}`); } if (definition?.validator && typeof definition.validator === "function" && output[name] !== undefined) { try { const valid = definition.validator(output[name]); if (__dev && !valid) console.warn(`Invalid prop value for ${name}`); } catch (error) { if (__dev) console.warn(`Prop validator failed for ${name}`, error); } } } return output; };',
             'const __installStyle = () => {',
             '  if (!__style || typeof document === "undefined") return;',
             f'  const styleId = "teloce-style-{HashGenerator().generate(component.name, length=9)}";',
@@ -550,7 +574,7 @@ class Generator:
             '  };',
             '  patchChildren(target, template.content);',
             '};',
-            'const __renderTemplate = (source, state) => {',
+            'const __renderTemplate = (source, state, loopScopes = new Map()) => {',
             '  // Templates are data, never callbacks. Accept a render function only for',
             '  // explicit advanced integrations and always normalize the result to text.',
             '  let output = typeof source === "function" ? source(state) : source == null ? "" : String(source);',
@@ -578,21 +602,26 @@ class Generator:
             '  __installStyle();',
             '  let update = () => {}; let rendering = false; let updateQueued = false; let updateScheduled = false; let suppressUpdates = false;',
             '  const requestUpdate = () => { if (suppressUpdates) return; if (rendering || updateScheduled) { updateQueued = true; return; } updateScheduled = true; queueMicrotask(() => { updateScheduled = false; rendering = true; try { update(); } finally { rendering = false; if (updateQueued) { updateQueued = false; requestUpdate(); } } }); };',
-            '  let mounted = false;',
+            '  let mounted = false; let loopScopes = new Map();',
             '  let previous = {};',
             '  const __reactiveCache = new WeakMap();',
             '  const __reactive = (value, notify) => { if (!value || typeof value !== "object") return value; const cached = __reactiveCache.get(value); if (cached) return cached; const proxy = new Proxy(value, { get(object, key, receiver) { const result = Reflect.get(object, key, receiver); return result && typeof result === "object" ? __reactive(result, notify) : result; }, set(object, key, next, receiver) { const changed = !Object.is(object[key], next); const result = Reflect.set(object, key, next, receiver); if (changed) notify(); return result; }, deleteProperty(object, key) { const existed = Object.prototype.hasOwnProperty.call(object, key); const result = Reflect.deleteProperty(object, key); if (existed) notify(); return result; } }); __reactiveCache.set(value, proxy); return proxy; };',
-            '  const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
+            '  const state = new Proxy(Object.assign({}, __createInitialData(), __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
             '  state.$style = __styleClasses;',
             '  for (const [name, getter] of Object.entries(__component.computed || {})) Object.defineProperty(state, name, { enumerable: true, get: () => getter.call(state) });',
             '  const methods = __component.methods || {};',
             '  for (const [name, method] of Object.entries(methods)) state[name] = method.bind(state);',
             '  state.$emit = (name, detail) => target.dispatchEvent(new CustomEvent(`teloce:${name}`, { detail, bubbles: true }));',
+            '  const __handleHookError = (error, source) => { if (source !== "errorCaptured" && typeof __component.errorCaptured === "function") { try { const handled = __component.errorCaptured.call(state, error, null, source); if (handled && typeof handled.then === "function") handled.catch(captured => { if (__dev) console.error("Teloce errorCaptured hook failed:", captured); }); if (handled === false) return; } catch (captured) { if (__dev) console.error("Teloce errorCaptured hook failed:", captured); } } if (__dev) console.error(`Teloce ${source} hook failed:`, error); };',
+            '  const __callHook = (name, ...args) => { const hook = __component[name]; if (typeof hook !== "function") return; try { const result = hook.call(state, ...args); if (result && typeof result.then === "function") result.catch(error => __handleHookError(error, name)); return result; } catch (error) { __handleHookError(error, name); } };',
+            '  suppressUpdates = true; try { __callHook("beforeCreate"); __callHook("created"); } finally { suppressUpdates = false; }',
+            '  const __watchValue = name => String(name).split(".").reduce((value, key) => value == null ? undefined : value[key], state);',
+            '  previous = Object.fromEntries(Object.keys(__component.watch || {}).map(name => [name, __watchValue(name)]));',
             '  update = () => {',
             '    const wasMounted = mounted;',
-            '    if (wasMounted && typeof __component.beforeUpdate === "function") __component.beforeUpdate.call(state);',
-            '    if (!mounted && typeof __component.beforeMount === "function") __component.beforeMount.call(state);',
-            '    __patch(target, __renderTemplate(__template, state));',
+            '    if (wasMounted) __callHook("beforeUpdate");',
+            '    if (!mounted) __callHook("beforeMount");',
+            '    loopScopes = new Map(); __patch(target, __renderTemplate(__template, state, loopScopes));',
             '    const nativeEvents = new Set(["click", "input", "submit", "change", "keyup", "keydown", "focus", "blur", "mouseenter", "mouseleave"]);',
             '    const __eventExpressionScope = values => new Proxy(values, { get(object, key, receiver) { return Reflect.has(object, key) ? Reflect.get(object, key, receiver) : state[key]; }, set(object, key, value, receiver) { if (Reflect.has(state, key)) { state[key] = value; return true; } return Reflect.set(object, key, value, receiver); } });',
             '    const __bindEvents = (element, force = false) => {',
@@ -633,15 +662,15 @@ class Generator:
             '      if (!element.__teloceMounted && child && typeof child.mount === "function") { element.__teloceMounted = true; element.__teloceInstance = child.mount(element, __readProps(element, state)); } else if (element.__teloceInstance?.updateProps) { element.__teloceInstance.updateProps(__readProps(element, state)); }',
             '    });',
             '    for (const element of Array.from(target.querySelectorAll("*"))) if (componentLookup.has(element.tagName.toLowerCase())) __bindEvents(element, true);',
-            '    if (!mounted && typeof __component.mounted === "function") __component.mounted.call(state);',
+            '    if (!mounted) { __callHook("mounted"); __callHook("activated"); }',
             '    mounted = true;',
-            '    for (const [name, handler] of Object.entries(__component.watch || {})) { if (!Object.is(previous[name], state[name])) handler.call(state, state[name], previous[name]); previous[name] = state[name]; }',
-            '    if (wasMounted && typeof __component.updated === "function") __component.updated.call(state);',
+            '    for (const [name, handler] of Object.entries(__component.watch || {})) { const value = __watchValue(name); if (!Object.is(previous[name], value)) { try { const result = handler.call(state, value, previous[name]); if (result && typeof result.then === "function") result.catch(error => __handleHookError(error, `watch:${name}`)); } catch (error) { __handleHookError(error, `watch:${name}`); } previous[name] = value; } }',
+            '    if (wasMounted) __callHook("updated");',
             '  };',
             '  update();',
-            '  const updateProps = nextProps => { const normalized = __normalizeProps(nextProps); let changed = false; suppressUpdates = true; try { for (const [key, value] of Object.entries(normalized)) if (!Object.is(state[key], value)) { state[key] = value; changed = true; } } finally { suppressUpdates = false; } if (changed) { rendering = true; try { update(); } finally { rendering = false; } } };',
+            '  const updateProps = nextProps => { const normalized = __normalizeProps(nextProps); let changed = false; suppressUpdates = true; try { for (const [key, value] of Object.entries(normalized)) if (!Object.is(state[key], value)) { state[key] = value; changed = true; } for (const key of Object.keys(__component.props || {})) if (!(key in normalized) && state[key] !== undefined) { state[key] = undefined; changed = true; } } finally { suppressUpdates = false; } if (changed) { rendering = true; try { update(); } finally { rendering = false; } } };',
             '  const __hmrRecord = { target, state, reload: async () => { const snapshot = {}; for (const key of Object.keys(state)) if (!key.startsWith("$") && typeof state[key] !== "function") snapshot[key] = state[key]; __unregisterHmr(__hmrRecord); const fresh = await import(`${__moduleUrl}?teloce_hmr=${Date.now()}`); return fresh.mount(target, snapshot); } }; __registerHmr(__hmrRecord);',
-            '  const __instance = { state, update, updateProps, unmount: () => { if (!mounted) return; if (typeof __component.beforeUnmount === "function") __component.beforeUnmount.call(state); __unregisterHmr(__hmrRecord); const nodes = [target, ...target.querySelectorAll("*")]; nodes.forEach(element => { element.__teloceInstance?.unmount?.(); if (element.__teloceHandlers) for (const record of element.__teloceHandlers.values()) element.removeEventListener(record.actualEvent, record.listener, record.options); element.__teloceHandlers?.clear?.(); element.__teloceInstance = undefined; element.__teloceMounted = false; }); target.replaceChildren(); mounted = false; if (typeof __component.unmounted === "function") __component.unmounted.call(state); } }; __hmrRecord.instance = __instance; return __instance;',
+            '  const __instance = { state, update, updateProps, unmount: () => { if (!mounted) return; __callHook("deactivated"); __callHook("beforeUnmount"); __unregisterHmr(__hmrRecord); const nodes = [target, ...target.querySelectorAll("*")]; nodes.forEach(element => { element.__teloceInstance?.unmount?.(); if (element.__teloceHandlers) for (const record of element.__teloceHandlers.values()) element.removeEventListener(record.actualEvent, record.listener, record.options); element.__teloceHandlers?.clear?.(); element.__teloceInstance = undefined; element.__teloceMounted = false; }); target.replaceChildren(); mounted = false; __callHook("unmounted"); } }; __hmrRecord.instance = __instance; return __instance;',
             '}',
             'export const createApp = mount;',
             '__component.mount = mount;',
@@ -656,12 +685,20 @@ class Generator:
                     del runtime[patch_start:patch_end + 1]
             runtime = [line for line in runtime if not line.startswith('  const __reactive = ')]
             runtime = [line.replace(
-                'const state = new Proxy(Object.assign({}, __initialData, __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
-                'const state = __createReactive(Object.assign({}, __initialData, __normalizeProps(props)), requestUpdate);',
+                'const state = new Proxy(Object.assign({}, __createInitialData(), __normalizeProps(props)), { get(object, key, receiver) { const value = Reflect.get(object, key, receiver); return value && typeof value === "object" ? __reactive(value, requestUpdate) : value; }, set(object, key, value) { object[key] = value; requestUpdate(); return true; }, deleteProperty(object, key) { const result = delete object[key]; requestUpdate(); return result; } });',
+                'const state = __createReactive(Object.assign({}, __createInitialData(), __normalizeProps(props)), requestUpdate);',
             ) for line in runtime]
         return [
             line
             .replace("else __evaluate(handlerName", "else __runEventExpression(handlerName")
+            .replace(
+                'const encoded = JSON.stringify({ [itemMatch[1]]: value, index }).replace(/&/g, "&amp;").replace(/"/g, "&quot;"); return `<${tag}${before}data-teloce-event-${name}="${expression}" data-teloce-loop-scope="${encoded}"${after}>`;',
+                'const scopeId = String(loopScopes.size); loopScopes.set(scopeId, loopScope); return `<${tag}${before}data-teloce-event-${name}="${expression}" data-teloce-loop-scope="${scopeId}"${after}>`;',
+            )
+            .replace(
+                'const eventScope = { ...state }; try { Object.assign(eventScope, JSON.parse(element.getAttribute("data-teloce-loop-scope") || "{}")); } catch (_) {} const handler = state[handlerName]; if (typeof handler === "function") handler(event?.detail ?? event); else __runEventExpression(handlerName, __eventExpressionScope({ ...eventScope, event, $event: event }));',
+                'const scopeId = element.getAttribute("data-teloce-loop-scope"); const eventScope = { ...state, ...(scopeId == null ? {} : loopScopes.get(scopeId) || {}) }; try { const handler = state[handlerName]; const result = typeof handler === "function" ? handler(event?.detail ?? event) : __runEventExpression(handlerName, __eventExpressionScope({ ...eventScope, event, $event: event })); if (result && typeof result.then === "function") result.catch(error => __handleHookError(error, `event:${eventName}`)); } catch (error) { __handleHookError(error, `event:${eventName}`); }',
+            )
             # Run user handlers after the native event dispatch finishes. This
             # prevents synchronous DOM reconciliation from mutating the active
             # event target and keeps state updates consistently batched.

@@ -1,7 +1,11 @@
 from pathlib import Path
+import re
+import shutil
+import subprocess
 
 import pytest
 
+from teloce.compiler import compile as compile_source
 from teloce.compiler import compile_file
 
 
@@ -33,6 +37,33 @@ def test_readme_links_to_all_real_world_examples():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for name in EXAMPLES:
         assert f"examples/{name}" in readme
+
+
+def test_readme_chat_component_compiles_to_valid_javascript(tmp_path):
+    """Keep the flagship copy-paste component executable as documented."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(
+        r"Create `static/js/App\.vel`:\s*```html\s*(.*?)\s*```",
+        readme,
+        re.DOTALL,
+    )
+    assert match, "README App.vel example was not found"
+
+    result = compile_source(match.group(1), filename="README-App.vel")
+    assert result["success"], result["diagnostics"]
+    assert "async mounted(" in result["code"]
+
+    node = shutil.which("node")
+    if node:
+        module = tmp_path / "README-App.mjs"
+        module.write_text(result["code"], encoding="utf-8")
+        checked = subprocess.run(
+            [node, "--check", str(module)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert checked.returncode == 0, checked.stderr
 
 
 def test_every_documentation_page_has_content_and_python_app_workflow():

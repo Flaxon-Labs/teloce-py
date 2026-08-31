@@ -8,10 +8,10 @@ support including ES modules, exports, imports, and component options.
 import re
 import ast
 from typing import Optional, Dict, Any, List, Tuple, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from teloce.sfc.component import ComponentScript
-from teloce.javascript.parser import parse_javascript
+from teloce.javascript.parser import parse_javascript, tokenize_javascript
 
 
 def _read_ts_balanced(source: str, opening: int, open_char: str = '{', close_char: str = '}') -> int:
@@ -214,6 +214,10 @@ class ScriptParser:
         self.components: Dict[str, str] = {}  # Component name -> import source
         self._method_params: Dict[str, str] = {}
         self._method_async: Dict[str, bool] = {}
+        self._lifecycle_params: Dict[str, str] = {}
+        self._lifecycle_async: Dict[str, bool] = {}
+        self._watch_params: Dict[str, str] = {}
+        self._watch_async: Dict[str, bool] = {}
     
     def parse(self, source: str, filename: str = "<input>") -> ComponentScript:
         """
@@ -233,6 +237,10 @@ class ScriptParser:
         self.components = {}
         self._method_params = {}
         self._method_async = {}
+        self._lifecycle_params = {}
+        self._lifecycle_async = {}
+        self._watch_params = {}
+        self._watch_async = {}
         
         original_source = source
         if str(self.options.get("lang", "js")).lower() in {"ts", "tsx", "typescript"}:
@@ -256,23 +264,32 @@ class ScriptParser:
             
             # Parse exports
             self._parse_exports(source)
+
+            # Component options must be read from the exported component
+            # object, not from helper objects, strings, or functions elsewhere
+            # in the module.
+            option_source = self._extract_default_export_object(source) or source
             
             # Extract component options
-            script.name = self._extract_component_name(source)
-            script.data = self._extract_data(source)
-            script.methods = self._extract_methods(source)
+            script.name = self._extract_component_name(option_source)
+            script.data = self._extract_data(option_source)
+            script.methods = self._extract_methods(option_source)
             script.method_params = dict(self._method_params)
             script.method_async = dict(self._method_async)
-            script.computed = self._extract_computed(source)
-            script.props = self._extract_props(source)
-            script.lifecycle = self._extract_lifecycle(source)
+            script.computed = self._extract_computed(option_source)
+            script.props = self._extract_props(option_source)
+            script.lifecycle = self._extract_lifecycle(option_source)
+            script.lifecycle_params = dict(self._lifecycle_params)
+            script.lifecycle_async = dict(self._lifecycle_async)
             
             # Extract registered components
-            self._extract_components(source)
+            self._extract_components(option_source)
             
             # Extract watch and other options
-            script.watch = self._extract_watch(source)
-            script.emits = self._extract_emits(source)
+            script.watch = self._extract_watch(option_source)
+            script.watch_params = dict(self._watch_params)
+            script.watch_async = dict(self._watch_async)
+            script.emits = self._extract_emits(option_source)
             
         except Exception as e:
             self.errors.append(f"Error parsing script: {str(e)}")
@@ -303,6 +320,191 @@ class ScriptParser:
         )
         code = re.sub(r'(?m)^\s*import\s+[\'\"]([^\'\"]+\.vel)[\'\"]\s*;?\s*$', '', code)
         return code.strip()
+
+    @staticmethod
+    def _matching_token_index(tokens: List[Any], opening: int) -> Optional[int]:
+        """Return the token index closing a delimiter at ``opening``."""
+        pairs = {'{': '}', '[': ']', '(': ')'}
+        opener = tokens[opening].value if 0 <= opening < len(tokens) else None
+        if opener not in pairs:
+            return None
+        stack: List[str] = []
+        for index in range(opening, len(tokens)):
+            value = tokens[index].value
+            if value in pairs:
+                stack.append(pairs[value])
+            elif value in {'}', ']', ')'}:
+                if not stack or stack[-1] != value:
+                    return None
+                stack.pop()
+                if not stack:
+                    return index
+        return None
+
+    def _extract_default_export_object(self, source: str) -> Optional[str]:
+        """Return the object passed as the component's default export.
+
+        Both ``export default { ... }`` and the common
+        ``export default defineComponent({ ... })`` form are accepted.
+        """
+        tokens = tokenize_javascript(source)
+        for index in range(len(tokens) - 2):
+            if tokens[index].value != 'export' or tokens[index + 1].value != 'default':
+                continue
+            cursor = index + 2
+            if tokens[cursor].value == '{':
+                opening = cursor
+            elif (
+                tokens[cursor].kind == 'identifier'
+                and cursor + 2 < len(tokens)
+                and tokens[cursor + 1].value == '('
+                and tokens[cursor + 2].value == '{'
+            ):
+                opening = cursor + 2
+            else:
+                return None
+            closing = self._matching_token_index(tokens, opening)
+            if closing is None:
+                return None
+            return source[tokens[opening].start:tokens[closing].end]
+        return None
+
+    def _scan_object_methods(
+        self,
+        source: str,
+        allowed_names: Optional[Set[str]] = None,
+    ) -> Dict[str, Tuple[str, str, bool]]:
+        """Read direct method-valued properties from a JavaScript object.
+
+        Supports shorthand methods, ``function`` properties, and block-bodied
+        arrow functions while preserving parameters, async, nested bodies,
+        regex literals, and template literals.
+        """
+        tokens = tokenize_javascript(source)
+        methods: Dict[str, Tuple[str, str, bool]] = {}
+        depth = 0
+        index = 0
+        while index < len(tokens) and tokens[index].kind != 'eof':
+            token = tokens[index]
+            if token.value == '{':
+                depth += 1
+                index += 1
+                continue
+            if token.value == '}':
+                depth -= 1
+                index += 1
+                continue
+            if depth != 1:
+                index += 1
+                continue
+
+            is_async = False
+            key_index = index
+            if token.value == 'async':
+                is_async = True
+                key_index += 1
+            if key_index >= len(tokens) or tokens[key_index].kind not in {'identifier', 'string'}:
+                index += 1
+                continue
+            key_token = tokens[key_index]
+            try:
+                name = ast.literal_eval(key_token.value) if key_token.kind == 'string' else key_token.value
+            except (ValueError, SyntaxError):
+                index += 1
+                continue
+            if allowed_names is not None and name not in allowed_names:
+                index += 1
+                continue
+
+            cursor = key_index + 1
+            open_paren = None
+            if cursor < len(tokens) and tokens[cursor].value == '(':
+                open_paren = cursor
+            elif cursor < len(tokens) and tokens[cursor].value == ':':
+                cursor += 1
+                if cursor < len(tokens) and tokens[cursor].value == 'async':
+                    is_async = True
+                    cursor += 1
+                if cursor < len(tokens) and tokens[cursor].value == 'function':
+                    cursor += 1
+                    if cursor < len(tokens) and tokens[cursor].kind == 'identifier':
+                        cursor += 1
+                if cursor < len(tokens) and tokens[cursor].value == '(':
+                    open_paren = cursor
+            if open_paren is None:
+                index += 1
+                continue
+
+            close_paren = self._matching_token_index(tokens, open_paren)
+            if close_paren is None:
+                index += 1
+                continue
+            cursor = close_paren + 1
+            if cursor < len(tokens) and tokens[cursor].value == '=>':
+                cursor += 1
+            if cursor >= len(tokens) or tokens[cursor].value != '{':
+                index += 1
+                continue
+            close_body = self._matching_token_index(tokens, cursor)
+            if close_body is None:
+                index += 1
+                continue
+
+            params = source[tokens[open_paren].end:tokens[close_paren].start].strip()
+            body = source[tokens[cursor].end:tokens[close_body].start].strip()
+            methods[str(name)] = (body, params, is_async)
+            index = close_body + 1
+        return methods
+
+    def _scan_object_properties(self, source: str) -> Dict[str, str]:
+        """Return direct ``name: value`` properties from an object literal."""
+        tokens = tokenize_javascript(source)
+        properties: Dict[str, str] = {}
+        depth = 0
+        index = 0
+        while index < len(tokens) and tokens[index].kind != 'eof':
+            token = tokens[index]
+            if token.value == '{':
+                depth += 1
+                index += 1
+                continue
+            if token.value == '}':
+                depth -= 1
+                index += 1
+                continue
+            if not (
+                depth == 1
+                and token.kind in {'identifier', 'string'}
+                and index + 1 < len(tokens)
+                and tokens[index + 1].value == ':'
+            ):
+                index += 1
+                continue
+            try:
+                name = ast.literal_eval(token.value) if token.kind == 'string' else token.value
+            except (ValueError, SyntaxError):
+                index += 1
+                continue
+            value_start = index + 2
+            cursor = value_start
+            stack: List[str] = []
+            pairs = {'{': '}', '[': ']', '(': ')'}
+            while cursor < len(tokens):
+                value = tokens[cursor].value
+                if value in pairs:
+                    stack.append(pairs[value])
+                elif value in {'}', ']', ')'}:
+                    if stack and stack[-1] == value:
+                        stack.pop()
+                    elif not stack and value == '}':
+                        break
+                if not stack and value == ',':
+                    break
+                cursor += 1
+            if value_start < cursor:
+                properties[str(name)] = source[tokens[value_start].start:tokens[cursor - 1].end].strip()
+            index = cursor + 1 if cursor < len(tokens) and tokens[cursor].value == ',' else cursor
+        return properties
     
     def _parse_imports(self, source: str):
         """Parse imports from source-preserving AST nodes."""
@@ -377,11 +579,14 @@ class ScriptParser:
     
     def _extract_component_name(self, source: str) -> Optional[str]:
         """Extract component name from the script."""
-        # Check for name in export default object
-        name_pattern = r'name\s*:\s*["\']([^"\']+)["\']'
-        match = re.search(name_pattern, source)
-        if match:
-            return match.group(1)
+        name_value = self._scan_object_properties(source).get('name')
+        if name_value:
+            try:
+                value = ast.literal_eval(name_value)
+                if isinstance(value, str):
+                    return value
+            except (ValueError, SyntaxError):
+                pass
         
         # Check for name in exported const
         const_pattern = r'export\s+const\s+(\w+)\s*=\s*{'
@@ -424,30 +629,7 @@ class ScriptParser:
 
     def _read_balanced(self, source: str, opening: int) -> Optional[str]:
         """Read a balanced JavaScript brace expression."""
-        if opening < 0 or opening >= len(source) or source[opening] != '{':
-            return None
-        depth = 0
-        quote = None
-        escaped = False
-        for index in range(opening, len(source)):
-            char = source[index]
-            if quote:
-                if escaped:
-                    escaped = False
-                elif char == '\\':
-                    escaped = True
-                elif char == quote:
-                    quote = None
-                continue
-            if char in "'\"`":
-                quote = char
-            elif char == '{':
-                depth += 1
-            elif char == '}':
-                depth -= 1
-                if depth == 0:
-                    return source[opening:index + 1]
-        return None
+        return self._read_balanced_pair(source, opening, '{', '}')
     
     def _extract_methods(self, source: str) -> Dict[str, str]:
         """Extract methods from the script."""
@@ -458,32 +640,10 @@ class ScriptParser:
         # Find methods block
         methods_block = self._extract_block(source, 'methods')
         if methods_block:
-            # Scan balanced parameter/body pairs so nested functions and
-            # braces inside strings do not truncate a method.
-            cursor = 0
-            while cursor < len(methods_block):
-                match = re.search(r'(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(', methods_block[cursor:])
-                if not match:
-                    break
-                name = match.group(1)
-                open_paren = cursor + match.end() - 1
-                params_block = self._read_balanced_pair(methods_block, open_paren, '(', ')')
-                if not params_block:
-                    break
-                after_params = open_paren + len(params_block)
-                brace = methods_block.find('{', after_params)
-                if brace < 0:
-                    break
-                body_block = self._read_balanced_pair(methods_block, brace, '{', '}')
-                if not body_block:
-                    break
-                params = params_block[1:-1].strip()
-                body = body_block[1:-1].strip()
-                if name and body:
-                    methods[name] = body
-                    self._method_params[name] = params
-                    self._method_async[name] = re.match(r"async\s+", match.group(0)) is not None
-                cursor = brace + len(body_block)
+            for name, (body, params, is_async) in self._scan_object_methods(methods_block).items():
+                methods[name] = body
+                self._method_params[name] = params
+                self._method_async[name] = is_async
         
         # Also check for methods outside explicit block
         # This handles Vue 3 Composition API style
@@ -508,41 +668,17 @@ class ScriptParser:
         return methods
 
     def _read_balanced_pair(self, source: str, opening: int, open_char: str, close_char: str) -> Optional[str]:
-        """Read a balanced JS pair while respecting quoted strings/comments."""
+        """Read a balanced JS pair from source-located lexical tokens."""
         if opening < 0 or opening >= len(source) or source[opening] != open_char:
             return None
         depth = 0
-        quote = None
-        escaped = False
-        i = opening
-        while i < len(source):
-            char = source[i]
-            if quote:
-                if escaped:
-                    escaped = False
-                elif char == '\\':
-                    escaped = True
-                elif char == quote:
-                    quote = None
-                i += 1
-                continue
-            if char in "'\"`":
-                quote = char
-            elif char == '/' and i + 1 < len(source) and source[i + 1] == '/':
-                newline = source.find('\n', i + 2)
-                i = len(source) if newline < 0 else newline
-                continue
-            elif char == '/' and i + 1 < len(source) and source[i + 1] == '*':
-                end = source.find('*/', i + 2)
-                i = len(source) if end < 0 else end + 2
-                continue
-            elif char == open_char:
+        for token in tokenize_javascript(source[opening:]):
+            if token.value == open_char:
                 depth += 1
-            elif char == close_char:
+            elif token.value == close_char:
                 depth -= 1
                 if depth == 0:
-                    return source[opening:i + 1]
-            i += 1
+                    return source[opening:opening + token.end]
         return None
     
     def _extract_computed(self, source: str) -> Dict[str, str]:
@@ -599,12 +735,33 @@ class ScriptParser:
                 for name in prop_names:
                     props[name] = {'type': None, 'required': False, 'default': None}
             
-            # Parse object props: { prop: { type: String, required: true } }
+            # Parse object props with token boundaries so factory defaults,
+            # arrays, nested objects, and validators remain intact.
             if props_block.strip().startswith('{') and props_block.strip().endswith('}'):
-                prop_str = props_block.strip()[1:-1]
-                # Parse each prop definition
-                prop_defs = self._parse_prop_definitions(prop_str)
-                props.update(prop_defs)
+                for name, value in self._scan_object_properties(props_block).items():
+                    definition = {
+                        'type': None,
+                        'required': False,
+                        'default': None,
+                        'validator': None,
+                    }
+                    value = value.strip()
+                    if re.fullmatch(r'[A-Za-z_$][\w$]*', value):
+                        definition['type'] = value
+                    elif value.startswith('{'):
+                        fields = self._scan_object_properties(value)
+                        type_value = fields.get('type', '').strip()
+                        if type_value.startswith('[') and type_value.endswith(']'):
+                            types = [item.strip() for item in type_value[1:-1].split(',') if item.strip()]
+                            definition['type'] = '|'.join(types) or None
+                        elif type_value:
+                            definition['type'] = type_value
+                        definition['required'] = fields.get('required', '').strip() == 'true'
+                        if 'default' in fields:
+                            definition['default'] = fields['default'].strip()
+                        if 'validator' in fields:
+                            definition['validator'] = fields['validator'].strip()
+                    props[name] = definition
         
         return props
     
@@ -800,47 +957,68 @@ class ScriptParser:
     def _extract_lifecycle(self, source: str) -> Dict[str, str]:
         """Extract lifecycle hooks from the script."""
         lifecycle = {}
-        
+        self._lifecycle_params = {}
+        self._lifecycle_async = {}
+
         lifecycle_hooks = [
             'beforeMount', 'mounted', 'beforeUpdate', 'updated',
             'beforeUnmount', 'unmounted', 'beforeCreate', 'created',
             'activated', 'deactivated', 'errorCaptured'
         ]
-        
-        for hook in lifecycle_hooks:
-            match = re.search(rf'{hook}\s*\(\s*\)\s*\{{', source)
-            if match:
-                brace = source.find('{', match.start(), match.end())
-                block = self._read_balanced_pair(source, brace, '{', '}')
-                body = block[1:-1].strip() if block else ""
-                if body:
-                    lifecycle[hook] = body
-        
+
+        entries = self._scan_object_methods(source, set(lifecycle_hooks))
+        for hook, (body, params, is_async) in entries.items():
+            lifecycle[hook] = body
+            self._lifecycle_params[hook] = params
+            self._lifecycle_async[hook] = is_async
+
         return lifecycle
     
     def _extract_watch(self, source: str) -> Dict[str, str]:
         """Extract watch properties from the script."""
         watch = {}
+        self._watch_params = {}
+        self._watch_async = {}
         
         watch_block = self._extract_block(source, 'watch')
         if watch_block:
-            # Parse watch entries
-            watch_pattern = r'(\w+)\s*:\s*{\s*handler\s*\(\s*([^)]*)\s*\)\s*{\s*([\s\S]*?)\s*}\s*}'
-            for match in re.finditer(watch_pattern, watch_block):
-                prop = match.group(1)
-                params = match.group(2).strip()
-                body = match.group(3).strip()
-                if prop and body:
-                    watch[prop] = body
-            
-            # Simple watch: prop: function(newVal, oldVal) { ... }
-            simple_pattern = r'(\w+)\s*:\s*function\s*\(\s*([^)]*)\s*\)\s*{\s*([\s\S]*?)\s*}'
-            for match in re.finditer(simple_pattern, watch_block):
-                prop = match.group(1)
-                params = match.group(2).strip()
-                body = match.group(3).strip()
-                if prop and body and prop not in watch:
-                    watch[prop] = body
+            for prop, (body, params, is_async) in self._scan_object_methods(watch_block).items():
+                watch[prop] = body
+                self._watch_params[prop] = params
+                self._watch_async[prop] = is_async
+
+            # Object-form watchers: ``value: { async handler(...) {}, deep: true }``.
+            tokens = tokenize_javascript(watch_block)
+            depth = 0
+            index = 0
+            while index < len(tokens) and tokens[index].kind != 'eof':
+                token = tokens[index]
+                if token.value == '{':
+                    depth += 1
+                elif token.value == '}':
+                    depth -= 1
+                elif (
+                    depth == 1
+                    and token.kind in {'identifier', 'string'}
+                    and index + 2 < len(tokens)
+                    and tokens[index + 1].value == ':'
+                    and tokens[index + 2].value == '{'
+                ):
+                    closing = self._matching_token_index(tokens, index + 2)
+                    if closing is not None:
+                        try:
+                            prop = ast.literal_eval(token.value) if token.kind == 'string' else token.value
+                        except (ValueError, SyntaxError):
+                            prop = None
+                        nested = watch_block[tokens[index + 2].start:tokens[closing].end]
+                        handlers = self._scan_object_methods(nested, {'handler'})
+                        if prop is not None and 'handler' in handlers:
+                            body, params, is_async = handlers['handler']
+                            watch[str(prop)] = body
+                            self._watch_params[str(prop)] = params
+                            self._watch_async[str(prop)] = is_async
+                        index = closing
+                index += 1
         
         return watch
     
@@ -941,107 +1119,11 @@ class ScriptParser:
     
     def _extract_object_block(self, source: str, start: int) -> Optional[str]:
         """Extract an object block from the source."""
-        if start >= len(source) or source[start] != '{':
-            return None
-        
-        i = start + 1
-        braces = 1
-        in_string = False
-        in_regex = False
-        escape = False
-        
-        while i < len(source) and braces > 0:
-            char = source[i]
-            
-            if escape:
-                escape = False
-                i += 1
-                continue
-            
-            if char == '\\':
-                escape = True
-                i += 1
-                continue
-            
-            if in_string:
-                if char == in_string:
-                    in_string = False
-                i += 1
-                continue
-            
-            if char == '"' or char == "'":
-                in_string = char
-                i += 1
-                continue
-            
-            if char == '/':
-                # Check for regex
-                if i + 1 < len(source) and source[i + 1] == '/':
-                    in_regex = True
-                    i += 2
-                    continue
-                if in_regex and char == '/':
-                    in_regex = False
-                    i += 1
-                    continue
-            
-            if char == '{':
-                braces += 1
-            elif char == '}':
-                braces -= 1
-            
-            i += 1
-        
-        if braces == 0:
-            return source[start:i]
-        
-        return None
+        return self._read_balanced_pair(source, start, '{', '}')
     
     def _extract_array_block(self, source: str, start: int) -> Optional[str]:
         """Extract an array block from the source."""
-        if start >= len(source) or source[start] != '[':
-            return None
-        
-        i = start + 1
-        braces = 1
-        in_string = False
-        escape = False
-        
-        while i < len(source) and braces > 0:
-            char = source[i]
-            
-            if escape:
-                escape = False
-                i += 1
-                continue
-            
-            if char == '\\':
-                escape = True
-                i += 1
-                continue
-            
-            if in_string:
-                if char == in_string:
-                    in_string = False
-                i += 1
-                continue
-            
-            if char == '"' or char == "'":
-                in_string = char
-                i += 1
-                continue
-            
-            if char == '[':
-                braces += 1
-            elif char == ']':
-                braces -= 1
-            
-            i += 1
-        
-        if braces == 0:
-            return source[start:i]
-        
-        return None
+        return self._read_balanced_pair(source, start, '[', ']')
     
     def _is_inside_block(self, context: str, block_names: List[str]) -> bool:
         """Check if we're inside a specific block."""

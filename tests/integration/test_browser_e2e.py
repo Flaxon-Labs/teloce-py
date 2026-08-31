@@ -106,6 +106,77 @@ def test_shared_runtime_nested_component_slots_and_events_in_real_chrome(tmp_pat
 
 
 @pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_async_lifecycle_watchers_and_mount_state_are_isolated_in_real_chrome(tmp_path: Path):
+    (tmp_path / "static" / "js").mkdir(parents=True)
+    (tmp_path / "static" / "js" / "App.vel").write_text(
+        '''<template><button @click="increment">{{ count }}</button></template>
+<script>export default {
+  data() { return { count: 0, watchCalls: 0, items: [], events: [] }; },
+  async created() { this.events.push("created-start"); await Promise.resolve(); this.events.push("created-end"); },
+  beforeMount() { this.events.push("beforeMount"); },
+  async mounted() { this.events.push("mounted-start"); await Promise.resolve(); this.events.push("mounted-end"); },
+  beforeUpdate() { if (!this.events.includes("beforeUpdate")) this.events.push("beforeUpdate"); },
+  updated() { if (!this.events.includes("updated")) this.events.push("updated"); },
+  deactivated() { this.events.push("deactivated"); },
+  beforeUnmount() { this.events.push("beforeUnmount"); },
+  unmounted() { this.events.push("unmounted"); },
+  watch: { count: async function(value) { await Promise.resolve(); this.watchCalls++; } },
+  methods: { increment() { this.count++; } }
+};</script>''',
+        encoding="utf-8",
+    )
+    build_project(tmp_path, options={"dev": True, "source_maps": False})
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="one"></div><div id="two"></div><script type="module">'
+        'import { mount } from "/static/js/App.js"; const one = mount("#one"); const two = mount("#two"); '
+        'setTimeout(() => { one.state.items.push("private"); document.querySelector("#one button").click(); '
+        'setTimeout(() => { one.unmount(); document.title = [one.state.count, one.state.watchCalls, '
+        'two.state.count, two.state.items.length, one.state.events.join(",")].join(":"); }, 180); }, 120);'
+        '</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1800)
+        assert result.returncode == 0, result.stderr
+        assert "<title>1:1:0:0:" in result.stdout
+        for hook in ("created-start", "created-end", "beforeMount", "mounted-end", "beforeUpdate", "updated", "deactivated", "beforeUnmount", "unmounted"):
+            assert hook in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_prop_default_factories_create_isolated_values_per_mount(tmp_path: Path):
+    (tmp_path / "static" / "js").mkdir(parents=True)
+    (tmp_path / "static" / "js" / "App.vel").write_text(
+        '<template><p>{{ settings.tags.length }}</p></template><script>export default { '
+        'props: { settings: { type: Object, default: () => ({ tags: [] }), validator: value => Array.isArray(value.tags) } } '
+        '};</script>',
+        encoding="utf-8",
+    )
+    build_project(tmp_path, options={"dev": True, "source_maps": False})
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="one"></div><div id="two"></div><script type="module">import { mount } from "/static/js/App.js"; '
+        'const one = mount("#one"); const two = mount("#two"); one.state.settings.tags.push("private"); '
+        'setTimeout(() => document.title = one.state.settings.tags.length + ":" + two.state.settings.tags.length + ":" '
+        '+ document.querySelector("#one p").textContent + ":" + document.querySelector("#two p").textContent, 120);</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1200)
+        assert result.returncode == 0, result.stderr
+        assert "<title>1:0:1:0</title>" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
 def test_generated_component_hydrates_existing_server_rendered_markup(tmp_path: Path):
     (tmp_path / "static" / "js").mkdir(parents=True)
     (tmp_path / "static" / "js" / "App.vel").write_text(
@@ -206,6 +277,33 @@ def test_keyed_reconciliation_preserves_dom_identity_when_reordered(tmp_path: Pa
         result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1500)
         assert result.returncode == 0, result.stderr
         assert "<title>yes:BA</title>" in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(_chrome() is None, reason="Chrome/Chromium is not installed")
+def test_generated_loop_events_mutate_the_live_reactive_item(tmp_path: Path):
+    (tmp_path / "static" / "js").mkdir(parents=True)
+    (tmp_path / "static" / "js" / "App.vel").write_text(
+        '<template><button v-for="item in items" :key="item.id" @click="toggle(item)">{{ item.name }}:{{ item.done }}</button></template>'
+        '<script>export default { data() { return { items: [{id: 1, name: "One", done: false}] }; }, '
+        'methods: { toggle(item) { item.done = !item.done; } } };</script>',
+        encoding="utf-8",
+    )
+    build_project(tmp_path, options={"dev": True, "source_maps": False})
+    (tmp_path / "dist" / "index.html").write_text(
+        '<div id="app"></div><script type="module">import { mount } from "/static/js/App.js"; '
+        'const app = mount("#app"); setTimeout(() => { document.querySelector("button").click(); '
+        'setTimeout(() => document.title = document.querySelector("button").textContent + ":" + app.state.items[0].done, 100); }, 100);</script>',
+        encoding="utf-8",
+    )
+    server = start_dev_server("127.0.0.1", 0, tmp_path / "dist")
+    try:
+        time.sleep(0.1)
+        result = _dump_dom(f"http://127.0.0.1:{server.server_port}/?no_hmr=1", 1400)
+        assert result.returncode == 0, result.stderr
+        assert "<title>One:true:true</title>" in result.stdout
     finally:
         server.shutdown()
         server.server_close()
