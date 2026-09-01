@@ -29,6 +29,8 @@ class ProjectConfiguration:
                 'out_dir': 'dist',
                 'static_dir': 'static',
                 'clean': True,
+                'minify': True,
+                'shared_runtime': True,
                 'lazy_components': [],
                 'tree_shake': True,
                 'bundler': 'teloce',

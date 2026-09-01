@@ -1,0 +1,25 @@
+<template>
+  <main class="shell">
+    <p class="eyebrow">teloce.config.json</p>
+    <h1>{{ title }}</h1>
+    <p>This page was compiled from a custom <code>client/</code> source tree.</p>
+    <StatusCard label="Shared runtime" detail="One runtime file is imported by both components." />
+    <button type="button" @click="toggle">{{ enabled ? "Configuration enabled" : "Enable configuration" }}</button>
+  </main>
+</template>
+
+<script>
+import StatusCard from "./components/StatusCard.vel";
+
+export default {
+  components: { StatusCard },
+  data() { return { title: "Configured builds stay predictable", enabled: true }; },
+  methods: { toggle() { this.enabled = !this.enabled; } },
+};
+</script>
+
+<style scoped>
+:global(body) { margin: 0; background: #f6f8fc; color: #172033; font-family: system-ui, sans-serif; }
+.shell { max-width: 46rem; margin: 4rem auto; padding: 2rem; } .eyebrow { color: #4338ca; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+button { margin-top: 1.25rem; border: 0; border-radius: .55rem; padding: .7rem 1rem; background: #312e81; color: white; cursor: pointer; }
+</style>

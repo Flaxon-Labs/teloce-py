@@ -130,7 +130,7 @@ def strip_typescript_annotations(source: str) -> str:
     source = re.sub(r'\s+as\s+(?:const|readonly)\b', '', source)
     source = re.sub(r'([A-Za-z_$][\w$]*)\s*<[^>{};()]*>\s*(?=\()', r'\1', source)
     # Assertions such as ``value as User``.  Stop before expression syntax.
-    source = re.sub(r'\s+as\s+[A-Za-z_$][\w$]*(?:\s*<[^;,)]+>)?(?:\[\])?(?=\s*[,;.)]}])', '', source)
+    source = re.sub(r'\s+as\s+[A-Za-z_$][\w$]*(?:\s*<[^;,)]+>)?(?:\[\])?(?=\s*[,;.)\]}])', '', source)
     # Parameter annotations and optional parameter markers.
     source = re.sub(r'([A-Za-z_$][\w$]*)\s*\?\s*:\s*[A-Za-z_$][\w$]*(?:\s*<[^>]*>)?(?:\[\])?(?:\s*\|\s*[A-Za-z_$][\w$]*)*', r'\1', source)
     source = re.sub(r'([A-Za-z_$][\w$]*)\s*:\s*[A-Za-z_$][\w$]*(?:\s*<[^>]*>)?(?:\[\])?(?:\s*\|\s*[A-Za-z_$][\w$]*)*(?=\s*[,)=])', r'\1', source)

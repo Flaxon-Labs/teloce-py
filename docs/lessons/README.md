@@ -33,6 +33,11 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 27. [Production debugging workflow](27-production-debugging.md)
 28. [Optimized Teloce project structure](file-structure.md)
 29. [Fast Dev-Facts](fast-dev-facts.md)
+30. [Configure a production Teloce build](28-teloce-config.md)
+31. [Shared runtime and small component bundles](shared%20runtime.md)
+32. [TypeScript in `.vel`: a complete practical guide](29-ts-tutoiral.md)
+33. [TypeScript extras for real Teloce projects](30-Extra-ts.md)
+34. [Advanced TypeScript architecture with Teloce](31-advanced-ts.md)
 
 ## What you can build
 

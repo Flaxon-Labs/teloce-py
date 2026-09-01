@@ -233,6 +233,21 @@ export default {
     assert "async load(value)" in result["code"]
 
 
+def test_typescript_array_assertions_are_removed_before_javascript_generation():
+    source = '''
+<template><p>{{ notes.length }}</p></template>
+<script lang="ts">
+type Note = { id: string };
+export default {
+  data(): { notes: Note[] } { return { notes: [] as Note[] }; }
+};
+</script>
+'''
+    result = compile(source, "TypedArrayAssertion.vel", source_maps=False)
+    assert result["success"], result["diagnostics"]
+    assert " as Note[]" not in result["code"]
+
+
 def test_simple_typescript_enums_are_lowered_to_runtime_objects():
     source = '''
 <template><div>{{ status }}</div></template>

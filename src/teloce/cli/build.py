@@ -4,8 +4,6 @@ Build command - builds for production.
 Builds the project for production deployment.
 """
 
-import sys
-from pathlib import Path
 from typing import Any
 
 from teloce.project.discovery import ProjectDiscovery
@@ -28,7 +26,7 @@ def build_command(args: Any) -> int:
     
     # Discover project
     discovery = ProjectDiscovery()
-    project_info = discovery.discover()
+    discovery.discover()
     
     print(f"📁 Project: {discovery.get_project_name()}")
     
@@ -56,6 +54,7 @@ def build_command(args: Any) -> int:
         'source_maps': source_map,
         'dev': False,
         'clean': clean,
+        'static_dir': build_config.get('static_dir', 'static'),
         'hash_assets': getattr(args, 'hash_assets', False) or build_config.get('hash_assets', False),
         'bundle': getattr(args, 'bundle', False) or build_config.get('bundle', False),
         'bundler': getattr(args, 'bundler', None) or build_config.get('bundler', 'teloce'),
@@ -77,7 +76,7 @@ def build_command(args: Any) -> int:
     # Print results
     print("✅ Build complete!")
     print()
-    print(f"📊 Statistics:")
+    print("📊 Statistics:")
     print(f"   Total files: {result['total']}")
     print(f"   Compiled: {result['compiled']}")
     print(f"   Failed: {result['failed']}")

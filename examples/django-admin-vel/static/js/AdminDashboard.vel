@@ -1,0 +1,46 @@
+<template>
+  <main class="dashboard">
+    <header><div><p class="eyebrow">Django admin + Teloce</p><h1>Inventory dashboard</h1></div><button type="button" @click="load">Refresh</button></header>
+    <p v-if="error" class="error">{{ error }}</p>
+    <p v-else-if="loading">Loading inventory…</p>
+    <section v-else>
+      <div class="metrics"><article><strong>{{ totalProducts }}</strong><span>Products</span></article><article><strong>{{ unitsInStock }}</strong><span>Units in stock</span></article><article><strong>{{ lowStock.length }}</strong><span>Low stock</span></article></div>
+      <h2>Needs attention</h2>
+      <p v-if="lowStock.length === 0">Everything is above the low-stock threshold.</p>
+      <ul v-else><li v-for="product in lowStock" :key="product.id"><span>{{ product.name }}</span><strong>{{ product.stock }} left</strong></li></ul>
+    </section>
+  </main>
+</template>
+
+<script>
+export default {
+  data() { return { loading: true, error: "", totalProducts: 0, unitsInStock: 0, lowStock: [] }; },
+  async mounted() { await this.load(); },
+  methods: {
+    async load() {
+      this.loading = true;
+      this.error = "";
+      try {
+        const response = await fetch("/api/dashboard/summary/");
+        if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
+        const data = await response.json();
+        this.totalProducts = data.total_products;
+        this.unitsInStock = data.units_in_stock;
+        this.lowStock = data.low_stock;
+      } catch (error) { this.error = error.message || "Unable to load the dashboard"; }
+      finally { this.loading = false; }
+    },
+  },
+};
+</script>
+
+<style scoped>
+:global(body) { margin: 0; background: #f5f7fb; color: #172033; font-family: Inter, system-ui, sans-serif; }
+.dashboard { max-width: 62rem; margin: 0 auto; padding: 3rem 1.25rem; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.eyebrow { margin: 0; color: #4f46e5; font-size: .8rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: .3rem 0 2rem; } button { border: 0; border-radius: .55rem; padding: .7rem 1rem; background: #312e81; color: white; cursor: pointer; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; } article, li { border: 1px solid #dde2ee; border-radius: .75rem; background: white; padding: 1rem; }
+article strong { display: block; font-size: 1.7rem; } article span { color: #5e6b84; } ul { display: grid; gap: .6rem; padding: 0; list-style: none; } li { display: flex; justify-content: space-between; } .error { color: #b42318; }
+@media (max-width: 38rem) { .metrics { grid-template-columns: 1fr; } }
+</style>

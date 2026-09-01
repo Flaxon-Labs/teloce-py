@@ -182,7 +182,7 @@ teloce dev
 Production build:
 
 ```bash
-teloce build --out-dir dist --source-map --hash-assets --bundle
+python -m teloce build --out-dir dist --hash-assets --bundle --report build-report.json
 ```
 
 ## 10. Production checklist
@@ -197,3 +197,126 @@ teloce build --out-dir dist --source-map --hash-assets --bundle
 - run Python and browser tests;
 - pin Python and Teloce-Py versions;
 - add error monitoring for Python and browser failures.
+
+## 11. `teloce.config.json`
+
+Keep this in the project root and commit it so local development, CI, and
+deployment use identical paths and optimisation settings.
+
+```json
+{
+  "compiler": { "source_maps": false, "target": "es2020" },
+  "build": {
+    "out_dir": "dist",
+    "static_dir": "static",
+    "clean": true,
+    "minify": true,
+    "shared_runtime": true,
+    "tree_shake": true,
+    "bundler": "teloce",
+    "lazy_components": ["SettingsPage"]
+  },
+  "server": { "host": "127.0.0.1", "port": 5173, "hmr": true }
+}
+```
+
+`python -m teloce build` compiles `static/js/App.vel` to
+`dist/static/js/App.js` and writes `dist/static/teloce-runtime.js` once.
+Generated components import that shared runtime instead of duplicating it.
+
+## 12. Build commands
+
+```bash
+# Compile one self-contained component.
+python -m teloce compile static/js/App.vel -o dist/static/js/App.js --source-map
+
+# Normal configured project build.
+python -m teloce build
+
+# Production output and size report.
+python -m teloce build --minify --hash-assets --report build-report.json --max-size 50000
+
+# Optional final esbuild bundle/chunks (install esbuild in the app first).
+python -m teloce build --bundle --bundler esbuild --minify --hash-assets
+
+# Development tools.
+python -m teloce dev
+python -m teloce lint --strict
+python -m teloce doctor
+```
+
+Use `compile` for a standalone experiment. Use `build` for imported
+components, cached project builds, shared runtime output, and deployment.
+
+## 13. Django admin + `.vel` dashboard
+
+Django admin remains Django's permission-protected server UI. Use `.vel` for a
+staff dashboard that reads authorized Django endpoints.
+
+```python
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import JsonResponse
+from django.shortcuts import render
+from .models import Product
+
+@staff_member_required(login_url="/admin/login/")
+def home(request):
+    return render(request, "index.html")
+
+@staff_member_required(login_url="/admin/login/")
+def inventory_summary(request):
+    products = list(Product.objects.values("id", "name", "sku", "stock"))
+    return JsonResponse({"total_products": len(products), "products": products})
+```
+
+```html
+{% load static %}
+<div id="app"></div>
+<script type="module">
+  import { mount } from "{% static 'js/AdminDashboard.js' %}";
+  mount("#app");
+</script>
+```
+
+The complete tested project is [`examples/django-admin-vel`](../examples/django-admin-vel).
+Do not replace server authorization, CSRF protection, or model validation with
+browser checks.
+
+## 14. TypeScript in `.vel`
+
+```html
+<script lang="ts">
+interface CounterState { count: number; }
+export default {
+  data(): CounterState { return { count: 0 }; },
+  methods: { increment(): void { this.count++; } }
+};
+</script>
+```
+
+Teloce removes common type-only syntax, but it does not type-check. For full
+type checks and `.ts` utility modules:
+
+```bash
+npm install --save-dev typescript esbuild
+npx tsc --noEmit
+python -m teloce build --bundle --bundler esbuild --minify
+```
+
+Keep decorators, JSX/TSX, advanced type transformations, and path alias
+resolution in TypeScript/SWC/esbuild rather than expecting Python to transform
+the complete TypeScript language.
+
+## 15. Quick diagnosis
+
+| Symptom | Check |
+| --- | --- |
+| Blank page | Confirm HTML has `#app`, imports generated `.js` rather than `.vel`, and DevTools has no module error. |
+| `404 App.js` | Run `python -m teloce build`; serve `dist/static`; match the template URL to the output. |
+| `await` syntax error | Keep `async` before every method, lifecycle hook, or watcher that uses `await`. |
+| CSS missing | Use `<style>` in `.vel` or serve global CSS separately; never mount the authored `.vel`. |
+| `.ts` import fails | Bundle/transform it with esbuild or TypeScript; browsers do not run `.ts`. |
+| API redirects/403 | Sign in and keep authorization in the Python view. |
+
+For detailed diagnostics run `python -m teloce debug`, then use the
+[debugging guide](debugging.md) and [troubleshooting guide](troubleshooting.md).

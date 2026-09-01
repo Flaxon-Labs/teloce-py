@@ -1,0 +1,20 @@
+{
+  "compiler": {
+    "source_maps": false,
+    "target": "es2020"
+  },
+  "build": {
+    "out_dir": "public-assets",
+    "static_dir": "client",
+    "clean": true,
+    "minify": true,
+    "shared_runtime": true,
+    "tree_shake": true,
+    "bundler": "teloce"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 5002,
+    "hmr": true
+  }
+}

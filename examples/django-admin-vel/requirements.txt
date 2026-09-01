@@ -1,0 +1,2 @@
+Django>=5.0,<6
+teloce-py>=0.2.3

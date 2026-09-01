@@ -4,12 +4,9 @@ Create command - creates a new project.
 Scaffolds a new Teloce project with a template.
 """
 
-import sys
-import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
-import shutil
+from typing import Any
 import json
 import re
 
@@ -355,6 +352,10 @@ def create_teloce_config(project_path: Path) -> None:
             'out_dir': 'dist',
             'static_dir': 'static',
             'clean': True,
+            'minify': True,
+            'shared_runtime': True,
+            'tree_shake': True,
+            'bundler': 'teloce',
         },
         'server': {
             'host': '127.0.0.1',

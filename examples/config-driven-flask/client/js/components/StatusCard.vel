@@ -1,0 +1,3 @@
+<template><article class="card"><strong>{{ label }}</strong><span>{{ detail }}</span></article></template>
+<script>export default { props: { label: String, detail: String } };</script>
+<style scoped>.card { display: grid; gap: .3rem; padding: 1rem; border: 1px solid #dbe1ef; border-radius: .75rem; background: white; } span { color: #5a6680; }</style>

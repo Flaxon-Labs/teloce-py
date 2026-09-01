@@ -174,9 +174,9 @@ Use `--bundler esbuild` for whole-program tree-shaking, code splitting, and
 minification. Teloce supports limited common TypeScript syntax stripping, not
 full TypeScript type-checking. Read the [documentation](docs/README.md),
 [optimized structure lesson](docs/lessons/file-structure.md), and
-[all examples](examples/README.md): [`examples/flask-chat`](examples/flask-chat),
+[all examples](examples/README.md): [`examples/flask-chat`](examples/flask-chat), [`examples/config-driven-flask`](examples/config-driven-flask),
 [`examples/fastapi-cms`](examples/fastapi-cms), [`examples/django-scanner`](examples/django-scanner),
-[`examples/flaxon-network`](examples/flaxon-network), and [`examples/teloce-gallery`](examples/teloce-gallery).
+[`examples/django-admin-vel`](examples/django-admin-vel), [`examples/flaxon-network`](examples/flaxon-network), and [`examples/teloce-gallery`](examples/teloce-gallery).
 
 ## Status
 

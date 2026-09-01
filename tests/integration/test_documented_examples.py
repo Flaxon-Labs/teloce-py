@@ -14,6 +14,7 @@ EXAMPLES = {
     "flask-chat": "Flask",
     "fastapi-cms": "FastAPI",
     "django-scanner": "Django",
+    "django-admin-vel": "Django",
     "flaxon-network": "Flaxon",
 }
 
