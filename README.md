@@ -4,7 +4,7 @@
 
  
  <p align="center">
-  <img src="https://raw.githubusercontent.com/Flaxon-labs/teloce-py/main/assets/py-teloce.png" alt="teloce-py logo"
+  <img src="https://raw.githubusercontent.com/Flaxon-labs/teloce-py/main/assets/py-teloce.jpg" alt="teloce-py logo"
    width="200"/>
 </p>
 
