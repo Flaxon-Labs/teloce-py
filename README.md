@@ -2,6 +2,12 @@
 
 
 
+ 
+ <p align="center">
+  <img src="https://raw.githubusercontent.com/Flaxon-labs/teloce-py/main/assets/py-teloce.png" alt="teloce-py logo"
+   width="200"/>
+</p>
+
 
 
 Build interactive Python applications with `.vel` files. Teloce-Py compiles
