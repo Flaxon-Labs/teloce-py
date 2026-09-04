@@ -347,7 +347,7 @@ class Lexer:
                 ))
                 if self.current_char() == '=':
                     self.advance()
-                self._tokenize_attribute_value()
+                    self._tokenize_attribute_value()
                 continue
 
             attr_name = self._read_identifier()

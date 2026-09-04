@@ -631,7 +631,7 @@ class Generator:
                 if uses_transitions else
                 '  const disposeNode = node => { if (!node) return; if (node.__teloceInstance?.unmount) node.__teloceInstance.unmount(); if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options); for (const child of Array.from(node.childNodes || [])) disposeNode(child); };'
             ),
-            *(['  const __flipSnapshot = root => { if (!root || root.nodeType !== 1) return []; return [...(root.dataset.teloceAnimate === "flip" ? [[root, root.getBoundingClientRect()]] : []), ...Array.from(root.querySelectorAll?.(\'[data-teloce-animate="flip"]\') || []).map(node => [node, node.getBoundingClientRect()])]; };'] if uses_flip else []),
+            *(['  const __flipSnapshot = root => { if (!root) return []; return Array.from(root.children || []).filter(node => node.dataset && node.dataset.teloceAnimate === "flip").map(node => [node, node.getBoundingClientRect()]); };'] if uses_flip else []),
             '  const patchNode = (oldNode, newNode) => {',
             '    if (!oldNode || oldNode.nodeType !== newNode.nodeType || (oldNode.nodeType === 1 && oldNode.tagName !== newNode.tagName)) return cloneManaged(newNode);',
             '    if (oldNode.nodeType === 3) { if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue; return oldNode; }',
