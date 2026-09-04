@@ -50,18 +50,21 @@ class ElementNode(ASTNode):
     attributes: Dict[str, str] = field(default_factory=dict)
     events: List['EventNode'] = field(default_factory=list)
     bindings: List['BindingNode'] = field(default_factory=list)
+    transitions: List['TransitionDirectiveNode'] = field(default_factory=list)
     children: List[ASTNode] = field(default_factory=list)
     
     def __init__(self, tag: str, attributes: Dict[str, str] = None,
                  events: List['EventNode'] = None,
                  bindings: List['BindingNode'] = None,
                  children: List[ASTNode] = None,
-                 line: int = 0, column: int = 0):
+                 line: int = 0, column: int = 0,
+                 transitions: List['TransitionDirectiveNode'] = None):
         super().__init__(NodeType.ELEMENT, line, column)
         self.tag = tag
         self.attributes = attributes or {}
         self.events = events or []
         self.bindings = bindings or []
+        self.transitions = transitions or []
         self.children = children or []
     
     def accept(self, visitor):
@@ -161,6 +164,29 @@ class EventNode(ASTNode):
     
     def accept(self, visitor):
         return visitor.visit_event(self)
+
+
+@dataclass(init=False)
+class TransitionDirectiveNode(ASTNode):
+    """transition:/in:/out:/animate: directive node.
+
+    kind is one of "transition", "in", "out", "animate".
+    name is the helper name, e.g. "fade", "slide", "flip".
+    params is the raw `{ ... }` JS object literal, or "" if none given.
+    """
+    kind: str
+    name: str
+    params: str
+
+    def __init__(self, kind: str, name: str, params: str = "", line: int = 0, column: int = 0):
+        super().__init__(NodeType.BINDING, line, column)
+        self.kind = kind
+        self.name = name
+        self.params = params
+
+    def accept(self, visitor):
+        method = getattr(visitor, "visit_transition_directive", None)
+        return method(self) if method else visitor.visit_default(self)
 
 
 @dataclass(init=False)

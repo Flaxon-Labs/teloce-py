@@ -104,7 +104,7 @@ class Optimizer:
             if optimized:
                 optimized_children.append(optimized)
         
-        return ElementNode(
+        element = ElementNode(
             node.tag,
             node.attributes,
             node.events,
@@ -113,3 +113,5 @@ class Optimizer:
             node.line,
             node.column
         )
+        element.transitions = node.transitions
+        return element

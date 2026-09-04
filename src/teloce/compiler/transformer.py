@@ -51,7 +51,7 @@ class Transformer:
             if transformed:
                 transformed_children.append(transformed)
         
-        return ElementNode(
+        element = ElementNode(
             node.tag,
             node.attributes,
             node.events,
@@ -60,6 +60,8 @@ class Transformer:
             node.line,
             node.column
         )
+        element.transitions = node.transitions
+        return element
     
     def _transform_interpolation(self, node: InterpolationNode) -> InterpolationNode:
         """Transform an interpolation node."""

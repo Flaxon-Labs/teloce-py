@@ -489,6 +489,64 @@ class Generator:
         visit(nodes)
         return used
 
+    _TRANSITION_HELPER_SOURCE = {
+        'fade': 'function fade(node, opts = {}) { const { duration = 200, easing = "ease" } = opts; return node.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing, fill: "forwards" }); }',
+        'slide': 'function slide(node, opts = {}) { const { axis = "y", distance = 10, duration = 200, easing = "ease-out" } = opts; const prop = axis === "y" ? "translateY" : "translateX"; return node.animate([{ transform: `${prop}(${distance}px)`, opacity: 0 }, { transform: `${prop}(0)`, opacity: 1 }], { duration, easing, fill: "forwards" }); }',
+        'scale': 'function scale(node, opts = {}) { const { start = 0.9, duration = 150, easing = "ease-out" } = opts; return node.animate([{ transform: `scale(${start})`, opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration, easing, fill: "forwards" }); }',
+    }
+
+    def _generate_transition_helpers(self, used_helpers: set, uses_flip: bool) -> List[str]:
+        """Return JS source lines for transition/animation directives.
+
+        Only the built-in helpers (fade/slide/scale) actually named by a
+        transition:/in:/out: directive in this component are inlined, so a
+        component that never animates ships none of this code.
+        """
+        lines: List[str] = []
+        for name in sorted(used_helpers):
+            source = self._TRANSITION_HELPER_SOURCE.get(name)
+            if source:
+                lines.append(source)
+
+        builtin_names = [name for name in sorted(used_helpers) if name in self._TRANSITION_HELPER_SOURCE]
+        builtin_list = (', '.join(builtin_names) + ', ') if builtin_names else ''
+        lines.append(
+            f'const __transitionRegistry = {{ {builtin_list}'
+            '...((typeof __component !== "undefined" && __component.transitions) || {}) };'
+        )
+        lines.append(
+            'const __parseTransitionAttr = value => { '
+            'const sep = String(value).indexOf(":"); '
+            'if (sep === -1) return { name: value, opts: undefined }; '
+            'const name = value.slice(0, sep); const rest = value.slice(sep + 1); '
+            'let opts; '
+            'try { '
+            'const jsonish = rest.replace(/([{,]\\s*)([A-Za-z_$][\\w$]*)\\s*:/g, \'$1"$2":\').replace(/\'([^\']*)\'/g, \'"$1"\'); '
+            'opts = JSON.parse(jsonish); '
+            '} catch (_) { opts = undefined; } '
+            'return { name, opts }; };'
+        )
+        lines.append(
+            'const __runDirective = (node, attrName) => { const raw = node.getAttribute?.(attrName); if (!raw) return null; const { name, opts } = __parseTransitionAttr(raw); const fn = __transitionRegistry[name]; return fn ? fn(node, opts) : null; };'
+        )
+        lines.append(
+            '  const __playEnter = node => { if (!node || node.nodeType !== 1) return; '
+            'if (node.hasAttribute("data-teloce-in") || node.hasAttribute("data-teloce-transition")) '
+            '__runDirective(node, node.hasAttribute("data-teloce-in") ? "data-teloce-in" : "data-teloce-transition"); '
+            'node.querySelectorAll?.("[data-teloce-in], [data-teloce-transition]").forEach(child => '
+            '__runDirective(child, child.hasAttribute("data-teloce-in") ? "data-teloce-in" : "data-teloce-transition")); };'
+        )
+        lines.append(
+            '  const __playExit = node => { if (!node || node.nodeType !== 1 || !node.isConnected) return; '
+            'const attrName = node.hasAttribute("data-teloce-out") ? "data-teloce-out" : node.hasAttribute("data-teloce-transition") ? "data-teloce-transition" : null; '
+            'if (!attrName) return; '
+            'const parent = node.parentNode; const nextSibling = node.nextSibling; '
+            'const ghost = node.cloneNode(true); parent?.insertBefore(ghost, nextSibling); '
+            'const anim = __runDirective(ghost, attrName); '
+            'if (anim) anim.finished.then(() => ghost.remove()).catch(() => ghost.remove()); else ghost.remove(); };'
+        )
+        return lines
+
     def _generate_runtime(
         self,
         component: Component,
@@ -501,6 +559,12 @@ class Generator:
         now. This keeps generated files usable without npm while the shared
         runtime API evolves.
         """
+        uses_transitions = bool(re.search(r'data-teloce-(?:in|out|transition|animate)=', template_code))
+        used_transition_helpers = set(re.findall(
+            r'data-teloce-(?:in|out|transition)="([\w$]+)', template_code
+        ))
+        uses_flip = 'data-teloce-animate="flip' in template_code
+
         template_literal = json.dumps(template_code, ensure_ascii=False)
         style_literal = json.dumps(style_code, ensure_ascii=False)
         style_classes_literal = json.dumps(self.module_mapping, ensure_ascii=False)
@@ -553,11 +617,21 @@ class Generator:
             'const __pluginDirectives = typeof globalThis !== "undefined" ? (globalThis.teloce?.directives || {}) : {};',
             'const __sanitizeHtml = value => { const template = document.createElement("template"); template.innerHTML = String(value ?? ""); template.content.querySelectorAll("script,iframe,object,embed,link,meta,base").forEach(node => node.remove()); template.content.querySelectorAll("*").forEach(node => { for (const attribute of Array.from(node.attributes)) { const name = attribute.name.toLowerCase(); const text = attribute.value.trim().toLowerCase(); if (name.startsWith("on") || ((name === "href" || name === "src" || name === "action" || name === "formaction") && /^(?:javascript|vbscript|data):/.test(text))) node.removeAttribute(attribute.name); } }); return template.innerHTML; };',
             'const __applyBinding = (element, name, value) => { if (name === "class") { element.className = __mapClass(value) ?? ""; } else if (name === "style" && value && typeof value === "object") { for (const [key, item] of Object.entries(value)) element.style[key] = item ?? ""; } else if (name === "show" || name === "hide") { element.hidden = name === "show" ? !Boolean(value) : Boolean(value); } else if (name === "html") { element.innerHTML = __sanitizeHtml(value); } else if (name === "text") { element.textContent = value == null ? "" : String(value); } else if (["disabled", "checked", "selected", "readonly", "required", "multiple"].includes(name)) { element.toggleAttribute(name, Boolean(value)); } else if (value === false || value == null) element.removeAttribute(name); else element.setAttribute(name, String(value)); };',
+            *(self._generate_transition_helpers(used_transition_helpers, uses_flip) if uses_transitions else []),
             'const __patch = (target, html) => {',
             '  const template = document.createElement("template"); template.innerHTML = html;',
             '  const markManaged = node => { if (!node) return node; node.__teloceManaged = true; if (node.nodeType === 1) { node.__teloceManagedAttributes = new Set(Array.from(node.attributes).map(attribute => attribute.name)); for (const child of Array.from(node.childNodes)) markManaged(child); } return node; };',
-            '  const cloneManaged = node => markManaged(node.cloneNode(true));',
-            '  const disposeNode = node => { if (!node) return; if (node.__teloceInstance?.unmount) node.__teloceInstance.unmount(); if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options); for (const child of Array.from(node.childNodes || [])) disposeNode(child); };',
+            (
+                '  const cloneManaged = node => { const clone = markManaged(node.cloneNode(true)); __playEnter(clone); return clone; };'
+                if uses_transitions else
+                '  const cloneManaged = node => markManaged(node.cloneNode(true));'
+            ),
+            (
+                '  const disposeNode = node => { if (!node) return; __playExit(node); if (node.__teloceInstance?.unmount) node.__teloceInstance.unmount(); if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options); for (const child of Array.from(node.childNodes || [])) disposeNode(child); };'
+                if uses_transitions else
+                '  const disposeNode = node => { if (!node) return; if (node.__teloceInstance?.unmount) node.__teloceInstance.unmount(); if (node.__teloceHandlers) for (const record of node.__teloceHandlers.values()) node.removeEventListener(record.actualEvent, record.listener, record.options); for (const child of Array.from(node.childNodes || [])) disposeNode(child); };'
+            ),
+            *(['  const __flipSnapshot = root => { if (!root || root.nodeType !== 1) return []; return [...(root.dataset.teloceAnimate === "flip" ? [[root, root.getBoundingClientRect()]] : []), ...Array.from(root.querySelectorAll?.(\'[data-teloce-animate="flip"]\') || []).map(node => [node, node.getBoundingClientRect()])]; };'] if uses_flip else []),
             '  const patchNode = (oldNode, newNode) => {',
             '    if (!oldNode || oldNode.nodeType !== newNode.nodeType || (oldNode.nodeType === 1 && oldNode.tagName !== newNode.tagName)) return cloneManaged(newNode);',
             '    if (oldNode.nodeType === 3) { if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue; return oldNode; }',
@@ -569,8 +643,20 @@ class Generator:
             '  };',
             '  const patchChildren = (parent, templateParent) => {',
             '    const old = Array.from(parent.childNodes); for (const node of old) if (!node.__teloceManaged) markManaged(node); const next = Array.from(templateParent.childNodes); const managed = old.filter(node => node.__teloceManaged); const keyed = new Map(managed.filter(node => node.nodeType === 1 && node.dataset.teloceKey).map(node => [node.dataset.teloceKey, node])); const used = new Set(); let cursor = 0; let anchor = parent.firstChild;',
+            (
+                '    const __flipNextKeys = next.filter(node => node.nodeType === 1 && node.dataset && node.dataset.teloceKey).map(node => node.dataset.teloceKey);'
+                ' const __flipPrevKeys = parent.__teloceFlipKeys || null;'
+                ' const __flipOrderChanged = !__flipPrevKeys || __flipPrevKeys.length !== __flipNextKeys.length || __flipPrevKeys.some((key, index) => key !== __flipNextKeys[index]);'
+                ' const __flipBefore = __flipOrderChanged ? __flipSnapshot(parent) : [];'
+                ' parent.__teloceFlipKeys = __flipNextKeys;'
+                if uses_flip else ''
+            ),
             '    next.forEach(newNode => { const key = newNode.nodeType === 1 ? newNode.dataset.teloceKey : null; let oldNode = key && keyed.has(key) ? keyed.get(key) : (key ? null : managed[cursor++]); if (oldNode && used.has(oldNode)) oldNode = null; if (oldNode) used.add(oldNode); const result = oldNode ? patchNode(oldNode, newNode) : cloneManaged(newNode); if (result !== oldNode) { if (oldNode && oldNode.parentNode === parent) { disposeNode(oldNode); parent.replaceChild(result, oldNode); } else parent.insertBefore(result, anchor || null); } else if (result !== anchor) parent.insertBefore(result, anchor || null); anchor = result.nextSibling; });',
             '    for (const oldNode of managed) if (!used.has(oldNode) && oldNode.parentNode === parent) { disposeNode(oldNode); parent.removeChild(oldNode); }',
+            (
+                '    for (const [node, from] of __flipBefore) { if (!node.isConnected) continue; const to = node.getBoundingClientRect(); const dx = from.left - to.left, dy = from.top - to.top; if (dx || dy) node.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }], { duration: 200, easing: "ease-out" }); }'
+                if uses_flip else ''
+            ),
             '  };',
             '  patchChildren(target, template.content);',
             '};',
@@ -857,6 +943,12 @@ class Generator:
         # Events
         for event in node.events:
             attrs.append(f'@{event.name}="{event.handler}"')
+
+        # Transition/animation directives
+        for directive in getattr(node, "transitions", []):
+            attr_name = f'data-teloce-{directive.kind}'
+            payload = f'{directive.name}:{directive.params}' if directive.params else directive.name
+            attrs.append(f'{attr_name}="{html.escape(payload, quote=True)}"')
         
         # Build opening tag
         attrs_str = ' ' + ' '.join(attrs) if attrs else ''

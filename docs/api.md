@@ -28,6 +28,29 @@ generated `css`, an optional source `map`, `diagnostics`, and parsed component
 information. Always check `success` before writing output. `build_project`
 returns build statistics and errors for a whole project.
 
+## Transition and animation directives
+
+`transition:`, `in:`, `out:`, and `animate:` (see [Directives](directives.md#transitions-and-animations))
+affect the generated `code` but need no separate API call — they compile
+through the normal `compile()` / `compile_file()` / `build_project()` path.
+
+The generator inspects each component's rendered template and only inlines
+the built-in helpers (`fade`, `slide`, `scale`, and the FLIP logic behind
+`animate:flip`) that the component actually references. A component with no
+transition directives emits none of that code, so `len(result["code"])` does
+not grow for components that don't use them.
+
+```python
+from teloce.compiler import compile
+
+result = compile(source, filename="Banner.vel")
+uses_transitions = 'data-teloce-in=' in result["code"] or 'data-teloce-out=' in result["code"]
+```
+
+There is no separate transitions flag in `teloce.config.json` — this is
+always on, driven entirely by whether a component's template contains
+`transition:`/`in:`/`out:`/`animate:` attributes.
+
 ## Server integration
 
 The API is useful for custom build systems. Most applications should compile

@@ -105,6 +105,55 @@ The compatibility aliases are:
 `v-text` writes escaped text. `v-html` writes HTML and must only receive trusted,
 sanitized content. Never pass raw user input to `v-html`.
 
+## Transitions and animations
+
+Use `transition:`, `in:`, `out:`, and `animate:` to animate elements on
+enter, exit, and reorder. These have no npm/Vue equivalent in this doc's
+compatibility table — they're a Teloce-native addition.
+
+```html
+<li v-for="item in items" :key="item.id"
+    transition:fade="{ duration: 150 }"
+    animate:flip>
+  {{ item.text }}
+</li>
+
+<div v-if="showBanner"
+     in:slide="{ axis: 'y', duration: 200 }"
+     out:fade="{ duration: 100 }">
+  Saved!
+</div>
+```
+
+- `transition:name` runs the same animation on both enter and exit.
+- `in:name` / `out:name` let enter and exit use different animations.
+- `animate:flip` animates a `v-for` row to its new position when the list
+  reorders (measured before the DOM update, applied after).
+- Built-in helpers: `fade`, `slide` (`axis: 'x' | 'y'`), `scale`.
+- Params are a JS-style object literal, e.g. `{ duration: 150, easing: 'ease-out' }`.
+
+Only the helpers a component actually references are compiled into its
+output — a component with no directives ships no transition code at all.
+
+Custom transitions can be registered from the component's script:
+
+```html
+<script>
+export default {
+  transitions: {
+    bounce(node, { duration = 300 } = {}) {
+      return node.animate(
+        [{ transform: "scale(0.9)" }, { transform: "scale(1)" }],
+        { duration, easing: "cubic-bezier(.36,1.5,.64,1)" }
+      );
+    }
+  }
+};
+</script>
+```
+
+then reference it the same way: `<div transition:bounce>`.
+
 ## Quick reference
 
 | Feature | Original Teloce API | npm-style alias |

@@ -55,7 +55,10 @@ class TokenType(Enum):
     HREF_BIND = auto()            # :href
     SRC_BIND = auto()             # :src
     BIND = auto()                 # :custom
-    
+
+    # Transition/animation directives
+    TRANSITION_DIRECTIVE = auto()  # transition:fade | in:slide | out:fade | animate:flip
+
     # Attribute tokens
     ATTRIBUTE_NAME = auto()
     ATTRIBUTE_VALUE = auto()
@@ -331,6 +334,22 @@ class Lexer:
                     self.advance()
                 self._tokenize_attribute_value()
                 continue
+            transition_prefix = self._peek_transition_prefix()
+            if transition_prefix:
+                start = self.position
+                for _ in range(len(transition_prefix) + 1):  # + 1 for the ':'
+                    self.advance()
+                modifier_name = self._read_identifier()
+                self.tokens.append(Token(
+                    TokenType.TRANSITION_DIRECTIVE,
+                    f'{transition_prefix}:{modifier_name}',
+                    self.line, start,
+                ))
+                if self.current_char() == '=':
+                    self.advance()
+                self._tokenize_attribute_value()
+                continue
+
             attr_name = self._read_identifier()
             if not attr_name:
                 self.advance()
@@ -471,6 +490,20 @@ class Lexer:
             self.column += 1
         self.position += 1
     
+    _TRANSITION_PREFIXES = ('transition', 'in', 'out', 'animate')
+
+    def _peek_transition_prefix(self) -> Optional[str]:
+        """Return 'transition'/'in'/'out'/'animate' if the source at the
+        current position matches PREFIX: followed by an identifier, else
+        None. Does not advance the lexer position."""
+        for prefix in self._TRANSITION_PREFIXES:
+            end = self.position + len(prefix)
+            if self.source.startswith(prefix, self.position) and end < len(self.source) and self.source[end] == ':':
+                after_colon = end + 1
+                if after_colon < len(self.source) and (self.source[after_colon].isalpha() or self.source[after_colon] == '_'):
+                    return prefix
+        return None
+
     def _read_identifier(self) -> str:
         """Read an identifier (tag name, attribute name, etc.)."""
         start = self.position

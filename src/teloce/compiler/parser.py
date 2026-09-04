@@ -11,7 +11,7 @@ from teloce.compiler.lexer import Token, TokenType
 from teloce.ast.nodes import (
     ASTNode, ElementNode, TextNode, InterpolationNode,
     ForNode, IfNode, ElseNode, EventNode, BindingNode,
-    ComponentNode, SlotNode, FragmentNode
+    ComponentNode, SlotNode, FragmentNode, TransitionDirectiveNode
 )
 
 
@@ -86,11 +86,26 @@ class Parser:
         attributes = {}
         events = []
         bindings = []
+        transitions = []
         
         while not self._is_at_end():
             token = self._peek()
-            
-            if token.type == TokenType.ATTRIBUTE_NAME:
+
+            if token.type == TokenType.TRANSITION_DIRECTIVE:
+                self._advance()
+                kind, _, modifier_name = token.value.partition(':')
+
+                if self._peek().type == TokenType.ATTRIBUTE_VALUE:
+                    value_token = self._advance()
+                    transitions.append(TransitionDirectiveNode(
+                        kind, modifier_name, value_token.value, token.line, token.column
+                    ))
+                else:
+                    transitions.append(TransitionDirectiveNode(
+                        kind, modifier_name, "", token.line, token.column
+                    ))
+
+            elif token.type == TokenType.ATTRIBUTE_NAME:
                 self._advance()
                 attr_name = token.value
                 
@@ -134,7 +149,7 @@ class Parser:
             elif token.type == TokenType.SELF_CLOSE_TAG:
                 self._advance()
                 return self._lower_long_form_directives(
-                    self._create_element(tag_name, attributes, events, bindings, [])
+                    self._create_element(tag_name, attributes, events, bindings, [], transitions)
                 )
             
             else:
@@ -151,7 +166,7 @@ class Parser:
                 )
         else:
             self.errors.append(f"Missing closing tag </{tag_name}>")
-        element = self._create_element(tag_name, attributes, events, bindings, children)
+        element = self._create_element(tag_name, attributes, events, bindings, children, transitions)
         return self._lower_long_form_directives(element)
 
     def _lower_long_form_directives(self, element: ElementNode) -> ASTNode:
@@ -304,9 +319,12 @@ class Parser:
         return IfNode(condition, children, else_children, start_token.line, start_token.column)
     
     def _create_element(self, tag: str, attributes: dict, events: List[EventNode],
-                        bindings: List[BindingNode], children: List[ASTNode]) -> ElementNode:
+                        bindings: List[BindingNode], children: List[ASTNode],
+                        transitions: List['TransitionDirectiveNode'] = None) -> ElementNode:
         """Create an element node with all attributes."""
-        return ElementNode(tag, attributes, events, bindings, children)
+        element = ElementNode(tag, attributes, events, bindings, children)
+        element.transitions = transitions or []
+        return element
     
     def _peek(self) -> Token:
         """Peek at the next token."""

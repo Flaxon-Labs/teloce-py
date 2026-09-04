@@ -38,6 +38,7 @@ This learning path teaches the complete workflow: write a `.vel` Single File Com
 32. [TypeScript in `.vel`: a complete practical guide](29-ts-tutoiral.md)
 33. [TypeScript extras for real Teloce projects](30-Extra-ts.md)
 34. [Advanced TypeScript architecture with Teloce](31-advanced-ts.md)
+35. [Transitions and animation directives](32-transitions-and-animations.md)
 
 ## What you can build
 
